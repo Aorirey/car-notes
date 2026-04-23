@@ -1,0 +1,209 @@
+/**
+ * Настройки нового сайта на этом шаблоне.
+ * 1) Поменяйте значения ниже под свой продукт.
+ * 2) Совпадение ключа темы: в index.html в <meta name="theme-storage-key" content="…" />
+ *    должен быть тот же текст, что и themeStorageKey (иначе мигание темы при первой загрузке).
+ */
+
+export default {
+  themeStorageKey: "site:theme",
+
+  /**
+   * Фоновая музыка: положите файл в `public/sound/` (путь от корня сайта).
+   * `volume` — начальная громкость 0…1, если в браузере ещё нет сохранённого значения.
+   */
+  backgroundAudio: {
+    src: "/sound/music.mp3",
+    volume: 0.85,
+  },
+
+  brandName: "Перекупыч",
+
+  seo: {
+    title: "Перекупыч",
+    description:
+      "Уютное место, где можно собрать всё, что вам нравится, и посмотреть, о чём мечтают ваши друзья.",
+  },
+
+  /** Все внешние ссылки лендинга. Замените на URL своего приложения / разделов. */
+  links: {
+    logo: "#",
+    catalog: "#",
+    friends: "#",
+    discover: "#",
+    showcaseAll: "#",
+    /** База для карточек витрины (якорь или каталог). */
+    product: "#",
+  },
+
+  copy: {
+    heroChip: "Перекупы перекупы душа нараспашку",
+    heroCtaPrimary: "Добавить машину",
+  },
+
+  /** Модальное окно «Добавить машину»: подписи и варианты выпадающих списков. */
+  addCarModal: {
+    title: "Добавить машину",
+    brandLabel: "Марка",
+    modelLabel: "Модель",
+    yearLabel: "Год выпуска",
+    linkLabel: "Ссылка на объявление",
+    linkPlaceholder: "https://auto.ru/…",
+    linkHint: "Необязательно: ссылка на объявление, отзыв или характеристики.",
+    linkCardLabel: "Открыть ссылку",
+    brands: [
+      { value: "", label: "Выберите марку" },
+      { value: "avtovaz", label: "АвтоВАЗ" },
+    ],
+    /** Модели АвтоВАЗ / Lada: классика ВАЗ, Samara, Priora, Kalina и актуальный модельный ряд. */
+    modelsByBrand: {
+      "": [{ value: "", label: "Сначала выберите марку" }],
+      avtovaz: [
+        { value: "", label: "Выберите модель" },
+        { value: "aura", label: "Lada Aura" },
+        { value: "iskra", label: "Lada Iskra" },
+        { value: "iskra-sw", label: "Lada Iskra SW" },
+        { value: "iskra-sw-cross", label: "Lada Iskra SW Cross" },
+        { value: "granta-sedan", label: "Lada Granta седан" },
+        { value: "granta-liftback", label: "Lada Granta лифтбек" },
+        { value: "granta-hatch", label: "Lada Granta хэтчбек" },
+        { value: "granta-wagon", label: "Lada Granta универсал" },
+        { value: "granta-cross", label: "Lada Granta Cross" },
+        { value: "granta-drive-active", label: "Lada Granta Drive Active" },
+        { value: "vesta-sedan", label: "Lada Vesta седан" },
+        { value: "vesta-cross", label: "Lada Vesta Cross" },
+        { value: "vesta-sw", label: "Lada Vesta SW" },
+        { value: "vesta-sw-cross", label: "Lada Vesta SW Cross" },
+        { value: "vesta-sport", label: "Lada Vesta Sport" },
+        { value: "vesta-ng", label: "Lada Vesta (новое поколение)" },
+        { value: "vesta-ng-cross", label: "Lada Vesta Cross (новое поколение)" },
+        { value: "vesta-ng-sw", label: "Lada Vesta SW (новое поколение)" },
+        { value: "xray", label: "Lada XRAY" },
+        { value: "xray-cross", label: "Lada XRAY Cross" },
+        { value: "largus-wagon", label: "Lada Largus универсал" },
+        { value: "largus-cross", label: "Lada Largus Cross" },
+        { value: "largus-van", label: "Lada Largus фургон" },
+        { value: "largus-fl", label: "Lada Largus FL" },
+        { value: "niva-travel", label: "Lada Niva Travel" },
+        { value: "niva-legend-3d", label: "Lada Niva Legend 3 дв." },
+        { value: "niva-legend-5d", label: "Lada Niva Legend 5 дв." },
+        { value: "niva-legend-bronto", label: "Lada Niva Legend Bronto" },
+        { value: "niva-legend-pickup", label: "Lada Niva Legend пикап" },
+        { value: "4x4-2121", label: "Lada 4×4 (ВАЗ-2121 «Нива»)" },
+        { value: "2123-niva", label: "Chevrolet Niva / Lada Niva (ВАЗ-2123)" },
+        { value: "priora-2170", label: "Lada Priora (ВАЗ-2170) седан" },
+        { value: "priora-2171", label: "Lada Priora (ВАЗ-2171) хэтчбек" },
+        { value: "priora-2172", label: "Lada Priora (ВАЗ-2172) универсал" },
+        { value: "kalina-1117", label: "Lada Kalina (ВАЗ-1117) универсал" },
+        { value: "kalina-1118", label: "Lada Kalina (ВАЗ-1118) хэтчбек" },
+        { value: "kalina-1119", label: "Lada Kalina (ВАЗ-1119) седан" },
+        { value: "kalina-2", label: "Lada Kalina II" },
+        { value: "2110", label: "ВАЗ-2110" },
+        { value: "2111", label: "ВАЗ-2111" },
+        { value: "2112", label: "ВАЗ-2112" },
+        { value: "2108", label: "ВАЗ-2108 «Samara»" },
+        { value: "2109", label: "ВАЗ-2109 «Samara»" },
+        { value: "21099", label: "ВАЗ-21099 «Samara»" },
+        { value: "2113", label: "ВАЗ-2113 «Samara»" },
+        { value: "2114", label: "ВАЗ-2114 «Samara»" },
+        { value: "2115", label: "ВАЗ-2115 «Samara»" },
+        { value: "2101", label: "ВАЗ-2101 «Жигули»" },
+        { value: "2102", label: "ВАЗ-2102" },
+        { value: "2103", label: "ВАЗ-2103 «Жигули»" },
+        { value: "2104", label: "ВАЗ-2104" },
+        { value: "2105", label: "ВАЗ-2105" },
+        { value: "2106", label: "ВАЗ-2106 «Жигули»" },
+        { value: "2107", label: "ВАЗ-2107" },
+        { value: "2120", label: "ВАЗ-2120 «Надежда»" },
+        { value: "2328", label: "ВАЗ-2328/2329 (пикап на базе Niva)" },
+        { value: "oka", label: "Lada Ока (СеАЗ)" },
+      ],
+    },
+    /**
+     * Диапазоны лет выпуска по ключу модели (как в modelsByBrand.avtovaz[].value).
+     * Границы — реальные серийные годы (Россия), без «фантазийных» сочетаний.
+     */
+    yearsByModel: {
+      aura: { from: 2025, to: 2026 },
+      iskra: { from: 2025, to: 2026 },
+      "iskra-sw": { from: 2025, to: 2026 },
+      "iskra-sw-cross": { from: 2025, to: 2026 },
+      "granta-sedan": { from: 2011, to: 2026 },
+      "granta-liftback": { from: 2014, to: 2026 },
+      "granta-hatch": { from: 2018, to: 2026 },
+      "granta-wagon": { from: 2015, to: 2026 },
+      "granta-cross": { from: 2014, to: 2026 },
+      "granta-drive-active": { from: 2023, to: 2026 },
+      "vesta-sedan": { from: 2015, to: 2024 },
+      "vesta-cross": { from: 2015, to: 2024 },
+      "vesta-sw": { from: 2015, to: 2024 },
+      "vesta-sw-cross": { from: 2015, to: 2024 },
+      "vesta-sport": { from: 2018, to: 2024 },
+      "vesta-ng": { from: 2025, to: 2026 },
+      "vesta-ng-cross": { from: 2025, to: 2026 },
+      "vesta-ng-sw": { from: 2025, to: 2026 },
+      xray: { from: 2016, to: 2024 },
+      "xray-cross": { from: 2018, to: 2024 },
+      "largus-wagon": { from: 2012, to: 2026 },
+      "largus-cross": { from: 2015, to: 2026 },
+      "largus-van": { from: 2012, to: 2026 },
+      "largus-fl": { from: 2021, to: 2026 },
+      "niva-travel": { from: 2020, to: 2026 },
+      "niva-legend-3d": { from: 2021, to: 2026 },
+      "niva-legend-5d": { from: 2021, to: 2026 },
+      "niva-legend-bronto": { from: 2021, to: 2026 },
+      "niva-legend-pickup": { from: 2021, to: 2026 },
+      "4x4-2121": { from: 1977, to: 2021 },
+      "2123-niva": { from: 2002, to: 2026 },
+      "priora-2170": { from: 2007, to: 2018 },
+      "priora-2171": { from: 2008, to: 2018 },
+      "priora-2172": { from: 2009, to: 2018 },
+      "kalina-1117": { from: 2004, to: 2013 },
+      "kalina-1118": { from: 2004, to: 2013 },
+      "kalina-1119": { from: 2004, to: 2013 },
+      "kalina-2": { from: 2013, to: 2018 },
+      2110: { from: 1995, to: 2009 },
+      2111: { from: 1998, to: 2009 },
+      2112: { from: 2000, to: 2009 },
+      2108: { from: 1984, to: 2003 },
+      2109: { from: 1987, to: 2004 },
+      21099: { from: 1990, to: 2011 },
+      2113: { from: 1997, to: 2013 },
+      2114: { from: 1997, to: 2013 },
+      2115: { from: 1997, to: 2013 },
+      2101: { from: 1970, to: 1988 },
+      2102: { from: 1971, to: 1986 },
+      2103: { from: 1972, to: 1984 },
+      2104: { from: 1984, to: 2012 },
+      2105: { from: 1979, to: 2011 },
+      2106: { from: 1976, to: 2005 },
+      2107: { from: 1982, to: 2012 },
+      2120: { from: 1998, to: 2006 },
+      2328: { from: 1994, to: 2006 },
+      oka: { from: 1988, to: 2008 },
+    },
+    cancelLabel: "Отмена",
+    saveLabel: "Добавить",
+  },
+
+  /**
+   * Модалка «Добавить описание»: два выпадающих списка (юр. состояние, битая), остальное — текст.
+   */
+  addDescriptionModal: {
+    title: "Добавить описание",
+    openButtonLabel: "добавить описание",
+    carContextPrefix: "Автомобиль:",
+    legalOptions: [
+      { value: "", label: "— выберите —" },
+      { value: "clean", label: "Чистая" },
+      { value: "not_clean", label: "Нечистая" },
+    ],
+    damagedOptions: [
+      { value: "", label: "— выберите —" },
+      { value: "yes", label: "Да" },
+      { value: "no", label: "Нет" },
+    ],
+    cancelLabel: "Отмена",
+    saveLabel: "Сохранить",
+  },
+};

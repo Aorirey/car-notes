@@ -1,0 +1,28 @@
+{
+  "name": "wishly-landing-design-mockup",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Лендинг Перекупыч: Vite + Tailwind, правки в site.config.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:api": "concurrently -k \"vite\" \"node server/index.mjs\"",
+    "start": "node server/index.mjs",
+    "build": "vite build",
+    "preview": "vite preview",
+    "build:css": "tailwindcss -i ./src/input.css -o ./styles.css",
+    "build:css:min": "tailwindcss -i ./src/input.css -o ./styles.css --minify"
+  },
+  "dependencies": {
+    "dotenv": "16.4.5",
+    "express": "4.21.2",
+    "pg": "8.13.1"
+  },
+  "devDependencies": {
+    "autoprefixer": "10.4.20",
+    "concurrently": "9.1.0",
+    "postcss": "8.4.47",
+    "tailwindcss": "3.4.13",
+    "vite": "5.4.10"
+  }
+}

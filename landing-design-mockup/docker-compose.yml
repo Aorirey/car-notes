@@ -1,0 +1,17 @@
+# Локальный Postgres: docker compose up -d
+# Затем DATABASE_URL=postgresql://car:car@localhost:5432/carnotes в .env
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: car
+      POSTGRES_PASSWORD: car
+      POSTGRES_DB: carnotes
+    ports:
+      - "5432:5432"
+    volumes:
+      - car_notes_pg:/var/lib/postgresql/data
+
+volumes:
+  car_notes_pg:

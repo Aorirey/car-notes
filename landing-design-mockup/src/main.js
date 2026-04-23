@@ -1,0 +1,703 @@
+import "./input.css";
+import site from "./site.config.js";
+import {
+  addGarageCar,
+  deleteGarageCar,
+  getGarageCar,
+  getAllGarageCars,
+  updateGarageCar,
+} from "./db.js";
+
+/** @param {unknown} input */
+function normalizeExternalUrl(input) {
+  const s = String(input ?? "").trim();
+  if (!s) return "";
+  let u;
+  try {
+    u = new URL(s);
+  } catch {
+    try {
+      u = new URL(`https://${s.replace(/^\/+/, "")}`);
+    } catch {
+      return "";
+    }
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return "";
+  return u.href;
+}
+
+function metaThemeKey() {
+  const el = document.querySelector('meta[name="theme-storage-key"]');
+  return (el && el.getAttribute("content")) || site.themeStorageKey;
+}
+
+function bgmVolumeStorageKey() {
+  return `${metaThemeKey()}:bgm-volume`;
+}
+
+/** @param {number} fallback 0…1 */
+function readStoredBgmVolume(fallback) {
+  try {
+    const raw = localStorage.getItem(bgmVolumeStorageKey());
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 0 && n <= 1) return n;
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
+/** @param {number} v 0…1 */
+function writeStoredBgmVolume(v) {
+  try {
+    localStorage.setItem(bgmVolumeStorageKey(), String(v));
+  } catch {
+    /* ignore */
+  }
+}
+
+function applySite() {
+  document.title = site.seo.title;
+  const desc = document.querySelector('meta[name="description"]');
+  if (desc) desc.setAttribute("content", site.seo.description);
+
+  document.querySelectorAll("[data-brand]").forEach((el) => {
+    el.textContent = site.brandName;
+  });
+
+  const logoRoot = document.querySelector("[data-logo-link]");
+  if (logoRoot) {
+    logoRoot.setAttribute("href", site.links.logo);
+    logoRoot.setAttribute("aria-label", site.brandName);
+  }
+
+  const map = {
+    "link-catalog": site.links.catalog,
+    "link-friends": site.links.friends,
+    "link-discover": site.links.discover,
+    "link-showcase-all": site.links.showcaseAll,
+  };
+  Object.entries(map).forEach(([attr, href]) => {
+    document.querySelectorAll(`[data-${attr}]`).forEach((el) => {
+      el.setAttribute("href", href || "#");
+    });
+  });
+
+  document.querySelectorAll("[data-link-product]").forEach((el) => {
+    el.setAttribute("href", site.links.product || "#");
+  });
+
+  const chip = document.querySelector("[data-copy-hero-chip]");
+  if (chip) chip.textContent = site.copy.heroChip;
+
+  const setText = (sel, text) => {
+    const n = document.querySelector(sel);
+    if (n && text != null) n.textContent = text;
+  };
+  setText("[data-copy-hero-cta-primary]", site.copy.heroCtaPrimary);
+}
+
+function wireTheme() {
+  const key = metaThemeKey();
+  const btn = document.getElementById("theme-toggle");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    const d = document.documentElement;
+    const dark = d.classList.toggle("dark");
+    d.style.colorScheme = dark ? "dark" : "light";
+    try {
+      localStorage.setItem(key, dark ? "dark" : "light");
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
+function fillSelect(select, options) {
+  select.innerHTML = "";
+  for (const { value, label } of options) {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = label;
+    select.appendChild(o);
+  }
+}
+
+/**
+ * @param {unknown} where
+ * @param {unknown} degree
+ * @param {string} title
+ */
+function formatWhereDegree(where, degree, title) {
+  const w = where != null ? String(where).trim() : "";
+  const d = degree != null ? String(degree).trim() : "";
+  if (!w && !d) return "";
+  if (w && d) return `${title}: ${w} — ${d}`;
+  if (w) return `${title}: ${w}`;
+  return `${title}: ${d}`;
+}
+
+/** @param {import("./db.js").GarageCar} car */
+function carDescriptionPreviewLines(car) {
+  const cfg = site.addDescriptionModal;
+  const lines = [];
+  const labelFor = (opts, val) => {
+    const o = opts?.find((x) => x.value === val);
+    return o?.label?.trim() || "";
+  };
+
+  if (car.legalStatus === "clean") {
+    const lab = labelFor(cfg.legalOptions, "clean");
+    lines.push(lab ? `Юр. состояние: ${lab}` : "Юр. состояние: чистая");
+  } else if (car.legalStatus === "not_clean") {
+    const lab = labelFor(cfg.legalOptions, "not_clean");
+    lines.push(lab ? `Юр. состояние: ${lab}` : "Юр. состояние: нечистая");
+  }
+
+  const electrical = car.electrical != null ? String(car.electrical).trim() : "";
+  if (electrical) lines.push(`Электрика: ${electrical}`);
+
+  const rust = formatWhereDegree(car.rustWhere, car.rustDegree, "Ржавчина");
+  if (rust) lines.push(rust);
+  const chips = formatWhereDegree(car.chipsWhere, car.chipsDamage, "Сколы");
+  if (chips) lines.push(chips);
+
+  if (car.damaged === "yes") {
+    const lab = labelFor(cfg.damagedOptions, "yes");
+    lines.push(lab ? `Битая: ${lab}` : "Битая: да");
+  } else if (car.damaged === "no") {
+    const lab = labelFor(cfg.damagedOptions, "no");
+    lines.push(lab ? `Битая: ${lab}` : "Битая: нет");
+  }
+
+  const dents = formatWhereDegree(car.dentsWhere, car.dentsDamage, "Вмятины");
+  if (dents) lines.push(dents);
+  const repaint = formatWhereDegree(car.repaintWhere, car.repaintDegree, "Крашена");
+  if (repaint) lines.push(repaint);
+
+  const general = car.generalCondition != null ? String(car.generalCondition).trim() : "";
+  if (general) lines.push(`Общее состояние: ${general}`);
+
+  const legacy = [car.desc1, car.desc2, car.desc3]
+    .map((x) => (x != null ? String(x).trim() : ""))
+    .filter(Boolean);
+  if (!lines.length && legacy.length) return legacy;
+  return lines;
+}
+
+/**
+ * @param {import("./db.js").GarageCar} car
+ */
+function createCarCardElement(car) {
+  const article = document.createElement("article");
+  article.className =
+    "car-card relative flex h-full min-h-[220px] flex-col overflow-hidden rounded-2xl border border-ink-200 bg-gradient-to-br from-ink-950 via-ink-900 to-ink-800 p-5 text-white dark:border-ink-700 sm:p-6";
+  article.dataset.carId = car.id;
+  article.setAttribute("aria-label", car.title);
+
+  const noise = document.createElement("div");
+  noise.className = "noise opacity-30";
+
+  const orb = document.createElement("div");
+  orb.setAttribute("aria-hidden", "true");
+  orb.className =
+    "pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-accent-500/35 blur-2xl";
+
+  const inner = document.createElement("div");
+  inner.className = "relative z-10 flex min-h-0 flex-1 flex-col";
+
+  const head = document.createElement("div");
+  head.className = "flex items-start justify-between gap-2";
+
+  const headMain = document.createElement("div");
+  headMain.className = "min-w-0 flex-1";
+  headMain.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-accent-300" aria-hidden="true">
+      <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+      <path d="M5 3v4" />
+      <path d="M19 17v4" />
+      <path d="M3 5h4" />
+      <path d="M17 19h4" />
+    </svg>
+  `;
+
+  const h2 = document.createElement("h2");
+  h2.className =
+    "mt-2 font-display text-lg font-medium leading-snug tracking-tight text-white sm:text-xl";
+  h2.textContent = car.title;
+  headMain.appendChild(h2);
+
+  const linkHref = car.linkUrl != null ? String(car.linkUrl).trim() : "";
+  if (linkHref) {
+    const ext = document.createElement("a");
+    ext.href = linkHref;
+    ext.target = "_blank";
+    ext.rel = "noopener noreferrer";
+    ext.className =
+      "mt-2 inline-flex max-w-full items-center gap-1 truncate text-xs font-medium text-accent-300 underline-offset-2 hover:text-white hover:underline sm:text-sm";
+    ext.textContent = site.addCarModal?.linkCardLabel ?? "Открыть ссылку";
+    headMain.appendChild(ext);
+  }
+
+  const delBtn = document.createElement("button");
+  delBtn.type = "button";
+  delBtn.dataset.deleteCar = "";
+  delBtn.setAttribute("aria-label", "Удалить карточку");
+  delBtn.className =
+    "btn shrink-0 rounded-full border border-white/25 bg-white/10 p-2 text-white transition hover:border-red-400/80 hover:bg-red-600/90 hover:text-white";
+  delBtn.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M3 6h18" />
+      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+      <line x1="10" x2="10" y1="11" y2="17" />
+      <line x1="14" x2="14" y1="11" y2="17" />
+    </svg>
+  `;
+
+  head.appendChild(headMain);
+  head.appendChild(delBtn);
+  inner.appendChild(head);
+
+  const descLines = carDescriptionPreviewLines(car);
+  if (descLines.length) {
+    const meta = document.createElement("p");
+    meta.className =
+      "mt-2 line-clamp-4 text-left text-xs leading-relaxed text-ink-200 sm:text-sm";
+    meta.textContent = descLines.join(" · ");
+    inner.appendChild(meta);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "mt-auto flex flex-wrap items-center gap-2 pt-4";
+  const descBtn = document.createElement("button");
+  descBtn.type = "button";
+  descBtn.dataset.openAddDescription = "";
+  descBtn.className =
+    "btn bg-white px-3 py-2 text-xs text-ink-950 hover:bg-accent-500 hover:text-white sm:text-sm";
+  descBtn.textContent =
+    site.addDescriptionModal?.openButtonLabel ?? "добавить описание";
+  actions.appendChild(descBtn);
+  inner.appendChild(actions);
+
+  article.append(noise, orb, inner);
+  return article;
+}
+
+async function renderGarageCards() {
+  const section = document.getElementById("user-car-cards-section");
+  const list = document.getElementById("user-car-cards-list");
+  if (!section || !list) return;
+  const cars = await getAllGarageCars();
+  list.innerHTML = "";
+  for (const car of cars) {
+    list.appendChild(createCarCardElement(car));
+  }
+  if (cars.length) section.classList.remove("hidden");
+  else section.classList.add("hidden");
+}
+
+async function appendCarCard({ title, linkUrl = "" }) {
+  await addGarageCar({ title, linkUrl });
+  await renderGarageCards();
+  const list = document.getElementById("user-car-cards-list");
+  list?.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function wireGarageCardActions() {
+  const list = document.getElementById("user-car-cards-list");
+  if (!list) return;
+  list.addEventListener("click", async (e) => {
+    const del = e.target.closest("[data-delete-car]");
+    if (!del) return;
+    const card = del.closest(".car-card");
+    const id = card?.dataset.carId;
+    if (!id) return;
+    if (!window.confirm("Удалить эту карточку?")) return;
+    try {
+      await deleteGarageCar(id);
+      await renderGarageCards();
+    } catch (err) {
+      console.error(err);
+    }
+  });
+}
+
+function wireAddCarModal() {
+  const cfg = site.addCarModal;
+  const dialog = document.getElementById("add-car-dialog");
+  const openBtns = document.querySelectorAll("[data-add-car-open]");
+  const brand = document.getElementById("modal-car-brand");
+  const model = document.getElementById("modal-car-model");
+  const year = document.getElementById("modal-car-year");
+  const link = document.getElementById("modal-car-link");
+  const form = document.getElementById("add-car-form");
+  if (!cfg || !dialog || !openBtns.length || !brand || !model || !year || !form) return;
+
+  const title = dialog.querySelector("[data-modal-title]");
+  if (title) title.textContent = cfg.title;
+
+  const lbBrand = dialog.querySelector("[data-modal-label-brand]");
+  const lbModel = dialog.querySelector("[data-modal-label-model]");
+  const lbYear = dialog.querySelector("[data-modal-label-year]");
+  const lbLink = dialog.querySelector("[data-modal-label-link]");
+  const linkHint = dialog.querySelector("[data-modal-link-hint]");
+  if (lbBrand) lbBrand.textContent = cfg.brandLabel;
+  if (lbModel) lbModel.textContent = cfg.modelLabel;
+  if (lbYear) lbYear.textContent = cfg.yearLabel;
+  if (lbLink) lbLink.textContent = cfg.linkLabel ?? "Ссылка";
+  if (link && cfg.linkPlaceholder != null) link.placeholder = cfg.linkPlaceholder;
+  if (linkHint) linkHint.textContent = cfg.linkHint ?? "";
+
+  const cancelBtn = dialog.querySelector("[data-modal-cancel-text]");
+  const saveBtn = dialog.querySelector("[data-modal-save-text]");
+  if (cancelBtn) cancelBtn.textContent = cfg.cancelLabel;
+  if (saveBtn) saveBtn.textContent = cfg.saveLabel;
+
+  function yearsOptionsForModel(modelKey) {
+    const yb = cfg.yearsByModel;
+    if (!modelKey || !yb || !yb[modelKey]) {
+      return [{ value: "", label: "Сначала выберите модель" }];
+    }
+    const range = yb[modelKey];
+    const from = range?.from;
+    const to = range?.to;
+    if (from == null || to == null || from > to) {
+      return [{ value: "", label: "Сначала выберите модель" }];
+    }
+    const out = [{ value: "", label: "Год выпуска" }];
+    for (let y = to; y >= from; y -= 1) {
+      out.push({ value: String(y), label: String(y) });
+    }
+    return out;
+  }
+
+  function syncYears() {
+    fillSelect(year, yearsOptionsForModel(model.value || ""));
+  }
+
+  function syncModels() {
+    const key = brand.value || "";
+    const list = cfg.modelsByBrand[key] ?? cfg.modelsByBrand[""];
+    fillSelect(model, list);
+    syncYears();
+  }
+
+  function applySingleBrandDefault() {
+    const withValue = cfg.brands.filter((b) => b.value);
+    if (withValue.length === 1) {
+      brand.value = withValue[0].value;
+      syncModels();
+    }
+  }
+
+  function resetModalForm() {
+    fillSelect(brand, cfg.brands);
+    syncModels();
+    applySingleBrandDefault();
+    if (link) link.value = "";
+  }
+
+  resetModalForm();
+  brand.addEventListener("change", syncModels);
+  model.addEventListener("change", syncYears);
+
+  openBtns.forEach((openBtn) => {
+    openBtn.addEventListener("click", () => {
+      resetModalForm();
+      dialog.showModal();
+    });
+  });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!form.reportValidity()) return;
+
+    const b = brand.options[brand.selectedIndex]?.text?.trim() ?? "";
+    const m = model.options[model.selectedIndex]?.text?.trim() ?? "";
+    const y = year.options[year.selectedIndex]?.text?.trim() ?? "";
+    if (!b || !m || !y) return;
+    if (b.startsWith("Выберите") || m.startsWith("Выберите") || m.startsWith("Сначала")) return;
+    if (y === "Год выпуска" || y.startsWith("Сначала")) return;
+
+    const rawLink = link?.value?.trim() ?? "";
+    const linkUrl = normalizeExternalUrl(rawLink);
+    if (rawLink && !linkUrl) {
+      window.alert(
+        "Укажите корректную ссылку (адрес с http или https) или оставьте поле пустым.",
+      );
+      return;
+    }
+
+    try {
+      await appendCarCard({ title: `${b} · ${m} · ${y}`, linkUrl });
+      dialog.close();
+      resetModalForm();
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
+  dialog.querySelectorAll("[data-modal-close]").forEach((btn) => {
+    btn.addEventListener("click", () => dialog.close());
+  });
+
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) dialog.close();
+  });
+}
+
+function wireAddDescriptionModal() {
+  const cfg = site.addDescriptionModal;
+  const dialog = document.getElementById("add-description-dialog");
+  const list = document.getElementById("user-car-cards-list");
+  const form = document.getElementById("add-description-form");
+  const legal = document.getElementById("desc-legal");
+  const electrical = document.getElementById("desc-electrical");
+  const rustWhere = document.getElementById("desc-rust-where");
+  const rustDegree = document.getElementById("desc-rust-degree");
+  const chipsWhere = document.getElementById("desc-chips-where");
+  const chipsDamage = document.getElementById("desc-chips-damage");
+  const damaged = document.getElementById("desc-damaged");
+  const dentsWhere = document.getElementById("desc-dents-where");
+  const dentsDamage = document.getElementById("desc-dents-damage");
+  const repaintWhere = document.getElementById("desc-repaint-where");
+  const repaintDegree = document.getElementById("desc-repaint-degree");
+  const general = document.getElementById("desc-general");
+  if (
+    !cfg ||
+    !dialog ||
+    !list ||
+    !form ||
+    !legal ||
+    !electrical ||
+    !rustWhere ||
+    !rustDegree ||
+    !chipsWhere ||
+    !chipsDamage ||
+    !damaged ||
+    !dentsWhere ||
+    !dentsDamage ||
+    !repaintWhere ||
+    !repaintDegree ||
+    !general
+  ) {
+    return;
+  }
+
+  let descriptionContextCarId = null;
+
+  const titleEl = dialog.querySelector("[data-desc-modal-title]");
+  if (titleEl) titleEl.textContent = cfg.title;
+
+  const cancelBtn = dialog.querySelector("[data-desc-cancel-text]");
+  const saveBtn = dialog.querySelector("[data-desc-save-text]");
+  if (cancelBtn) cancelBtn.textContent = cfg.cancelLabel;
+  if (saveBtn) saveBtn.textContent = cfg.saveLabel;
+
+  const carLine = dialog.querySelector("[data-desc-car-line]");
+
+  function resetDescForm() {
+    fillSelect(legal, cfg.legalOptions || [{ value: "", label: "—" }]);
+    fillSelect(damaged, cfg.damagedOptions || [{ value: "", label: "—" }]);
+    electrical.value = "";
+    rustWhere.value = "";
+    rustDegree.value = "";
+    chipsWhere.value = "";
+    chipsDamage.value = "";
+    dentsWhere.value = "";
+    dentsDamage.value = "";
+    repaintWhere.value = "";
+    repaintDegree.value = "";
+    general.value = "";
+  }
+
+  /** @param {import("./db.js").GarageCar | null} car */
+  function loadCarIntoForm(car) {
+    resetDescForm();
+    if (!car) return;
+    legal.value = car.legalStatus ?? "";
+    electrical.value = car.electrical ?? "";
+    rustWhere.value = car.rustWhere ?? "";
+    rustDegree.value = car.rustDegree ?? "";
+    chipsWhere.value = car.chipsWhere ?? "";
+    chipsDamage.value = car.chipsDamage ?? "";
+    damaged.value = car.damaged ?? "";
+    dentsWhere.value = car.dentsWhere ?? "";
+    dentsDamage.value = car.dentsDamage ?? "";
+    repaintWhere.value = car.repaintWhere ?? "";
+    repaintDegree.value = car.repaintDegree ?? "";
+    general.value = car.generalCondition ?? "";
+  }
+
+  function clearCarLine() {
+    if (!carLine) return;
+    carLine.textContent = "";
+    carLine.classList.add("hidden");
+  }
+
+  resetDescForm();
+
+  dialog.addEventListener("close", () => {
+    descriptionContextCarId = null;
+    clearCarLine();
+    resetDescForm();
+  });
+
+  list.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-open-add-description]");
+    if (!btn) return;
+    const card = btn.closest(".car-card");
+    descriptionContextCarId = card?.dataset.carId || null;
+    const carTitle = card?.querySelector("h2")?.textContent?.trim() ?? "";
+    if (carLine) {
+      carLine.textContent = `${cfg.carContextPrefix} ${carTitle}`;
+      carLine.classList.remove("hidden");
+    }
+    if (descriptionContextCarId) {
+      try {
+        const car = await getGarageCar(descriptionContextCarId);
+        loadCarIntoForm(car);
+      } catch (err) {
+        console.error(err);
+        resetDescForm();
+      }
+    } else {
+      resetDescForm();
+    }
+    dialog.showModal();
+  });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!descriptionContextCarId) {
+      dialog.close();
+      return;
+    }
+    try {
+      await updateGarageCar(descriptionContextCarId, {
+        legalStatus: legal.value,
+        electrical: electrical.value.trim(),
+        rustWhere: rustWhere.value.trim(),
+        rustDegree: rustDegree.value.trim(),
+        chipsWhere: chipsWhere.value.trim(),
+        chipsDamage: chipsDamage.value.trim(),
+        damaged: damaged.value,
+        dentsWhere: dentsWhere.value.trim(),
+        dentsDamage: dentsDamage.value.trim(),
+        repaintWhere: repaintWhere.value.trim(),
+        repaintDegree: repaintDegree.value.trim(),
+        generalCondition: general.value.trim(),
+      });
+      await renderGarageCards();
+    } catch (err) {
+      console.error(err);
+    }
+    dialog.close();
+  });
+
+  dialog.querySelectorAll("[data-desc-modal-close]").forEach((btn) => {
+    btn.addEventListener("click", () => dialog.close());
+  });
+
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) dialog.close();
+  });
+}
+
+function wireBackgroundAudio() {
+  const cfg = site.backgroundAudio;
+  const src = cfg?.src != null ? String(cfg.src).trim() : "";
+  const audio = document.getElementById("site-bgm");
+  const controls = document.getElementById("sound-controls");
+  const btn = document.getElementById("sound-toggle");
+  const volumeEl = document.getElementById("sound-volume");
+  const onIcon = document.getElementById("sound-icon-on");
+  const offIcon = document.getElementById("sound-icon-off");
+  if (!audio || !btn) return;
+  if (!src) {
+    controls?.classList.add("hidden");
+    btn.classList.add("hidden");
+    return;
+  }
+
+  const defaultVol =
+    typeof cfg?.volume === "number" && cfg.volume >= 0 && cfg.volume <= 1 ? cfg.volume : 0.85;
+  const initialVol = readStoredBgmVolume(defaultVol);
+
+  audio.src = src;
+  audio.loop = false;
+  audio.volume = initialVol;
+
+  if (volumeEl instanceof HTMLInputElement) {
+    volumeEl.value = String(Math.round(initialVol * 100));
+    volumeEl.setAttribute("aria-valuenow", volumeEl.value);
+    volumeEl.addEventListener("input", () => {
+      const pct = Number(volumeEl.value);
+      const v = Number.isFinite(pct) ? Math.min(1, Math.max(0, pct / 100)) : initialVol;
+      audio.volume = v;
+      volumeEl.setAttribute("aria-valuenow", volumeEl.value);
+    });
+    volumeEl.addEventListener("change", () => {
+      writeStoredBgmVolume(audio.volume);
+    });
+  }
+
+  function syncSoundUi() {
+    const ended = audio.ended;
+    const muted = audio.muted;
+    const showMute = muted || ended;
+    btn.setAttribute("aria-pressed", showMute ? "true" : "false");
+    if (ended) {
+      btn.setAttribute("aria-label", "Проиграть снова с начала");
+    } else {
+      btn.setAttribute("aria-label", muted ? "Включить звук" : "Выключить звук");
+    }
+    onIcon?.classList.toggle("hidden", showMute);
+    offIcon?.classList.toggle("hidden", !showMute);
+  }
+
+  function playFromStart() {
+    audio.currentTime = 0;
+    return audio.play();
+  }
+
+  playFromStart().catch(() => {
+    const unlock = () => {
+      playFromStart().catch(() => {});
+      document.removeEventListener("pointerdown", unlock, true);
+    };
+    document.addEventListener("pointerdown", unlock, { capture: true, once: true });
+  });
+
+  btn.addEventListener("click", () => {
+    if (audio.ended) {
+      audio.muted = false;
+      void playFromStart().catch(() => {});
+      syncSoundUi();
+      return;
+    }
+    audio.muted = !audio.muted;
+    syncSoundUi();
+  });
+
+  audio.addEventListener("volumechange", syncSoundUi);
+  audio.addEventListener("ended", syncSoundUi);
+  syncSoundUi();
+}
+
+async function bootstrap() {
+  applySite();
+  wireTheme();
+  wireBackgroundAudio();
+  try {
+    await renderGarageCards();
+  } catch (err) {
+    console.error(err);
+  }
+  wireAddCarModal();
+  wireAddDescriptionModal();
+  wireGarageCardActions();
+}
+
+void bootstrap();

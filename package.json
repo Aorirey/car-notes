@@ -1,0 +1,11 @@
+{
+  "name": "car-notes",
+  "private": true,
+  "scripts": {
+    "postinstall": "npm install --prefix landing-design-mockup",
+    "dev": "npm run dev --prefix landing-design-mockup",
+    "build": "npm run build --prefix landing-design-mockup",
+    "start": "npm run start --prefix landing-design-mockup",
+    "preview": "npm run preview --prefix landing-design-mockup"
+  }
+}
