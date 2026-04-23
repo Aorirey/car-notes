@@ -144,7 +144,11 @@ app.delete("/api/cars/:id", async (req, res) => {
   }
 });
 
-if (process.env.NODE_ENV === "production") {
+/** На Render выставляется RENDER=true; NODE_ENV может отличаться у провайдера. */
+const serveStatic =
+  process.env.NODE_ENV === "production" || process.env.RENDER === "true";
+
+if (serveStatic) {
   app.use(
     express.static(distDir, {
       index: false,
@@ -164,7 +168,7 @@ async function main() {
   await ensureSchema(pool);
   app.listen(PORT, () => {
     console.log(`car-notes server http://localhost:${PORT}`);
-    if (process.env.NODE_ENV === "production") {
+    if (serveStatic) {
       console.log(`static: ${distDir}`);
     }
   });
