@@ -80,7 +80,7 @@ export async function addGarageCar(payload) {
 }
 
 export async function updateGarageCar(id, patch) {
-  await api(`/api/cars/${encodeURIComponent(id)}`, {
+  return api(`/api/cars/${encodeURIComponent(id)}`, {
     method: "PATCH",
     json: patch,
   });

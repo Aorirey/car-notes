@@ -103,7 +103,7 @@ export async function updateGarageCar(id, patch) {
   const db = await openGarageDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => resolve(prev);
     tx.onerror = () => reject(tx.error);
     tx.objectStore(STORE).put(prev);
   });

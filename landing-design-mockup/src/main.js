@@ -996,8 +996,11 @@ function wireAddCarModal() {
     try {
       if (editingCarId) {
         await updateGarageCar(editingCarId, nextPayload);
+        await getGarageCar(editingCarId);
         await renderGarageCards();
         broadcastGarageInvalidate();
+        const editedCard = document.querySelector(`.car-card[data-car-id="${editingCarId}"]`);
+        animateCardEntry(editedCard instanceof HTMLElement ? editedCard : null);
       } else {
         await appendCarCard(nextPayload);
       }
@@ -1008,6 +1011,7 @@ function wireAddCarModal() {
       setModalMode("add");
     } catch (err) {
       console.error(err);
+      window.alert("Не удалось сохранить изменения. Проверьте заполнение полей и попробуйте снова.");
     }
   });
 
