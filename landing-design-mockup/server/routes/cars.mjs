@@ -34,10 +34,20 @@ export function createCarsRouter(pool) {
 
   router.get("/compare", async (req, res) => {
     try {
-      const rawIds = String(req.query.ids ?? "");
-      const ids = rawIds
-        .split(",")
-        .map((id) => id.trim())
+      const idsRaw = req.query.ids;
+      const idRaw = req.query.id;
+      const fromIds = Array.isArray(idsRaw)
+        ? idsRaw
+        : typeof idsRaw === "string"
+          ? idsRaw.split(",")
+          : [];
+      const fromId = Array.isArray(idRaw)
+        ? idRaw
+        : typeof idRaw === "string"
+          ? idRaw.split(",")
+          : [];
+      const ids = [...fromIds, ...fromId]
+        .map((id) => String(id).trim())
         .filter(Boolean);
       if (!ids.length) {
         res.json([]);

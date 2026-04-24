@@ -119,9 +119,15 @@ export async function getCarsForComparison(ids) {
   if (!clean.length) return [];
   const params = new URLSearchParams();
   params.set("ids", clean.join(","));
-  const data = await api(`/api/cars/compare?${params.toString()}`);
-  if (!Array.isArray(data)) {
-    throw new Error("Garage API: ожидался массив для сравнения");
+  try {
+    const data = await api(`/api/cars/compare?${params.toString()}`);
+    if (!Array.isArray(data)) {
+      throw new Error("Garage API: ожидался массив для сравнения");
+    }
+    return data;
+  } catch {
+    // Fallback for older backend builds without /compare support.
+    const loaded = await Promise.all(clean.map((id) => getGarageCar(id)));
+    return loaded.filter(Boolean);
   }
-  return data;
 }

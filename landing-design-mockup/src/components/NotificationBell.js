@@ -16,7 +16,9 @@ async function api(path, init = {}) {
     cache: "no-store",
   });
   if (!res.ok) {
-    throw new Error(await res.text());
+    const err = new Error(await res.text());
+    /** @type {Error & { status?: number }} */ (err).status = res.status;
+    throw err;
   }
   if (res.status === 204) return undefined;
   return res.json();
@@ -91,6 +93,15 @@ export function mountNotificationBell(mountPoint) {
       notifications = Array.isArray(data) ? data : [];
       render();
     } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        /** @type {{ status?: number }} */ (error).status === 404
+      ) {
+        notifications = [];
+        render();
+        return;
+      }
       console.error(error);
     }
   };
