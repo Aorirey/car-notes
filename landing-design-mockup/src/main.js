@@ -260,16 +260,23 @@ function formatMoneyAmount(amount) {
 function animateMoneyCounter(mount, target) {
   if (!(mount instanceof HTMLElement)) return;
   const finalValue = Math.max(0, Math.trunc(target));
-  const duration = 1200;
+  const fromRaw = Number(mount.dataset.counterValue ?? "0");
+  const startValue = Number.isFinite(fromRaw) ? fromRaw : 0;
+  const delta = Math.abs(finalValue - startValue);
+  const duration = Math.min(2600, Math.max(1400, 900 + delta * 0.0015));
   const start = performance.now();
-  const easeOutCubic = (t) => 1 - (1 - t) ** 3;
+  const easeInOutQuint = (t) =>
+    t < 0.5 ? 16 * t ** 5 : 1 - ((-2 * t + 2) ** 5) / 2;
 
   const tick = (now) => {
     const progress = Math.min(1, (now - start) / duration);
-    const current = Math.round(finalValue * easeOutCubic(progress));
+    const current =
+      startValue + (finalValue - startValue) * easeInOutQuint(progress);
     mount.textContent = formatMoneyAmount(current);
+    mount.dataset.counterValue = String(current);
     if (progress < 1) requestAnimationFrame(tick);
   };
+  mount.dataset.counterValue = String(startValue);
   requestAnimationFrame(tick);
 }
 
