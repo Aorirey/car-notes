@@ -87,6 +87,28 @@ function animateCardEntry(card) {
   );
 }
 
+/** @param {HTMLElement} container */
+function animateListEntries(container) {
+  if (!(container instanceof HTMLElement) || typeof container.animate !== "function") return;
+  const children = Array.from(container.children).filter(
+    (node) => node instanceof HTMLElement,
+  );
+  children.forEach((node, index) => {
+    node.animate(
+      [
+        { opacity: 0, transform: "translateY(12px) scale(0.99)" },
+        { opacity: 1, transform: "translateY(0) scale(1)" },
+      ],
+      {
+        duration: 440,
+        delay: Math.min(index * 45, 220),
+        easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+        fill: "both",
+      },
+    );
+  });
+}
+
 /** @param {unknown} title */
 function splitTitleParts(title) {
   const [brand = "", model = "", year = ""] = String(title ?? "")
@@ -641,6 +663,7 @@ async function renderGarageCards() {
       }
     }
     el.replaceChildren(frag);
+    animateListEntries(el);
   }
   fillList(listListed, listed, "listed");
   fillList(listPurchased, purchased, "purchased");
@@ -1419,6 +1442,13 @@ function wireSiteTabs() {
   }
   const logo = document.querySelector("[data-logo-link]");
   if (!garage || !tabs.length) return;
+  garage.classList.add("panel-surface");
+  for (const id of panelIds) {
+    panels[id]?.classList.add("panel-surface");
+  }
+  /** @type {HTMLElement} */
+  let activePanel = garage;
+  let activeTabName = "";
 
   function setTabActive(activeName) {
     tabs.forEach((t) => {
@@ -1428,25 +1458,81 @@ function wireSiteTabs() {
     });
   }
 
-  function showGarage() {
-    garage.hidden = false;
-    for (const id of panelIds) {
-      const p = panels[id];
-      if (p) p.hidden = true;
+  /**
+   * @param {HTMLElement} panel
+   * @returns {Promise<void>}
+   */
+  function animatePanelIn(panel) {
+    if (typeof panel.animate !== "function") return Promise.resolve();
+    const anim = panel.animate(
+      [
+        { opacity: 0, transform: "translateY(14px) scale(0.995)", filter: "blur(2px)" },
+        { opacity: 1, transform: "translateY(0) scale(1)", filter: "blur(0)" },
+      ],
+      {
+        duration: 420,
+        easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+        fill: "both",
+      },
+    );
+    return anim.finished.then(() => undefined).catch(() => undefined);
+  }
+
+  /**
+   * @param {HTMLElement} panel
+   * @returns {Promise<void>}
+   */
+  function animatePanelOut(panel) {
+    if (typeof panel.animate !== "function") return Promise.resolve();
+    const anim = panel.animate(
+      [
+        { opacity: 1, transform: "translateY(0) scale(1)", filter: "blur(0)" },
+        { opacity: 0, transform: "translateY(10px) scale(0.997)", filter: "blur(1px)" },
+      ],
+      {
+        duration: 240,
+        easing: "ease-out",
+        fill: "both",
+      },
+    );
+    return anim.finished.then(() => undefined).catch(() => undefined);
+  }
+
+  /**
+   * @param {string} nextTabName
+   */
+  async function switchPanel(nextTabName) {
+    const nextPanel =
+      nextTabName && panels[nextTabName] instanceof HTMLElement ? panels[nextTabName] : garage;
+    if (!(nextPanel instanceof HTMLElement)) return;
+    if (nextPanel === activePanel) {
+      setTabActive(nextTabName);
+      return;
     }
-    setTabActive("");
+    const prevPanel = activePanel;
+    await animatePanelOut(prevPanel);
+    prevPanel.hidden = true;
+    nextPanel.hidden = false;
+    await animatePanelIn(nextPanel);
+    for (const id of panelIds) {
+      const panel = panels[id];
+      if (panel && panel !== nextPanel) panel.hidden = true;
+    }
+    garage.hidden = nextPanel !== garage;
+    activePanel = nextPanel;
+    activeTabName = nextTabName;
+    setTabActive(activeTabName);
+  }
+
+  function showGarage() {
+    void switchPanel("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   /** @param {string} name */
   function showPanel(name) {
     if (!panels[name]) return;
-    garage.hidden = true;
-    for (const id of panelIds) {
-      const p = panels[id];
-      if (p) p.hidden = id !== name;
-    }
-    setTabActive(name);
+    void switchPanel(name);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
