@@ -71,6 +71,30 @@ function normalizeMileageText(input) {
   return Number(digits).toLocaleString("ru-RU");
 }
 
+/** @param {HTMLElement | null} card */
+function animateCardEntry(card) {
+  if (!(card instanceof HTMLElement) || typeof card.animate !== "function") return;
+  card.animate(
+    [
+      { opacity: 0, transform: "translateY(18px) scale(0.985)" },
+      { opacity: 1, transform: "translateY(0) scale(1)" },
+    ],
+    {
+      duration: 560,
+      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      fill: "both",
+    },
+  );
+}
+
+/** @param {unknown} title */
+function splitTitleParts(title) {
+  const [brand = "", model = "", year = ""] = String(title ?? "")
+    .split("·")
+    .map((part) => part.trim());
+  return { brand, model, year };
+}
+
 
 function metaThemeKey() {
   const el = document.querySelector('meta[name="theme-storage-key"]');
@@ -536,6 +560,14 @@ function createCarCardElement(car, listKind) {
     site.addDescriptionModal?.openButtonLabel ?? "Добавить описание";
   actions.appendChild(descBtn);
 
+  const editBtn = document.createElement("button");
+  editBtn.type = "button";
+  editBtn.dataset.openEditCar = "";
+  editBtn.className =
+    "btn border border-white/35 bg-white/15 px-3 py-2 text-xs text-white hover:border-accent-400 hover:bg-accent-500 hover:text-white sm:text-sm";
+  editBtn.textContent = "Редактировать";
+  actions.appendChild(editBtn);
+
   const deal = site.dealFlow ?? {};
   if (listKind === "listed") {
     const buyBtn = document.createElement("button");
@@ -625,6 +657,7 @@ async function appendCarCard({ title, linkUrl = "", purchasePrice = "", mileage 
   await renderGarageCards();
   broadcastGarageInvalidate();
   const list = document.getElementById("user-car-cards-list");
+  animateCardEntry(list?.lastElementChild instanceof HTMLElement ? list.lastElementChild : null);
   list?.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
@@ -700,6 +733,7 @@ function wireAddCarModal() {
 
   const title = dialog.querySelector("[data-modal-title]");
   if (title) title.textContent = cfg.title;
+  const carLine = dialog.querySelector("[data-modal-car-line]");
 
   const lbBrand = dialog.querySelector("[data-modal-label-brand]");
   const lbModel = dialog.querySelector("[data-modal-label-model]");
@@ -719,8 +753,13 @@ function wireAddCarModal() {
 
   const cancelBtn = dialog.querySelector("[data-modal-cancel-text]");
   const saveBtn = dialog.querySelector("[data-modal-save-text]");
+  const addTitleText = cfg.title ?? "Добавить машину";
+  const editTitleText = "Редактировать машину";
+  const addSaveText = cfg.saveLabel ?? "Добавить";
+  const editSaveText = "Сохранить";
   if (cancelBtn) cancelBtn.textContent = cfg.cancelLabel;
-  if (saveBtn) saveBtn.textContent = cfg.saveLabel;
+  if (saveBtn) saveBtn.textContent = addSaveText;
+  let editingCarId = null;
 
   function yearsOptionsForModel(modelKey) {
     const yb = cfg.yearsByModel;
@@ -751,6 +790,43 @@ function wireAddCarModal() {
     syncYears();
   }
 
+  /** @param {HTMLSelectElement} select @param {string} label */
+  function selectByLabel(select, label) {
+    const target = String(label ?? "").trim().toLowerCase();
+    if (!target) return false;
+    for (const option of Array.from(select.options)) {
+      if (option.text.trim().toLowerCase() === target) {
+        select.value = option.value;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** @param {import("./db.js").GarageCar | null} car */
+  function fillModalFromCar(car) {
+    resetModalForm();
+    if (!car) return;
+    const parts = splitTitleParts(car.title);
+    if (parts.brand) {
+      selectByLabel(brand, parts.brand);
+      syncModels();
+    }
+    if (parts.model) {
+      selectByLabel(model, parts.model);
+      syncYears();
+    }
+    if (parts.year) {
+      const yearValue = parts.year.replace(/[^\d]/g, "");
+      if (Array.from(year.options).some((opt) => opt.value === yearValue)) {
+        year.value = yearValue;
+      }
+    }
+    if (link) link.value = String(car.linkUrl ?? "").trim();
+    purchasePrice.value = normalizePriceText(car.purchasePrice ?? "");
+    mileage.value = normalizeMileageText(car.mileage ?? "");
+  }
+
   function applySingleBrandDefault() {
     const withValue = cfg.brands.filter((b) => b.value);
     if (withValue.length === 1) {
@@ -768,6 +844,21 @@ function wireAddCarModal() {
     mileage.value = "";
   }
 
+  /** @param {"add" | "edit"} mode @param {string} [carTitle] */
+  function setModalMode(mode, carTitle = "") {
+    if (title) title.textContent = mode === "edit" ? editTitleText : addTitleText;
+    if (saveBtn) saveBtn.textContent = mode === "edit" ? editSaveText : addSaveText;
+    if (carLine) {
+      if (mode === "edit") {
+        carLine.textContent = `Автомобиль: ${carTitle}`;
+        carLine.classList.remove("hidden");
+      } else {
+        carLine.textContent = "";
+        carLine.classList.add("hidden");
+      }
+    }
+  }
+
   resetModalForm();
   brand.addEventListener("change", syncModels);
   model.addEventListener("change", syncYears);
@@ -780,8 +871,31 @@ function wireAddCarModal() {
 
   openBtns.forEach((openBtn) => {
     openBtn.addEventListener("click", () => {
+      editingCarId = null;
       resetModalForm();
+      setModalMode("add");
       dialog.showModal();
+    });
+  });
+
+  document.querySelectorAll(".js-car-cards-list").forEach((list) => {
+    list.addEventListener("click", async (event) => {
+      const btn = event.target.closest("[data-open-edit-car]");
+      if (!btn) return;
+      const card = btn.closest(".car-card");
+      const carId = card?.dataset.carId;
+      if (!carId) return;
+      const carTitle = card?.querySelector("h2")?.textContent?.trim() ?? "";
+      try {
+        const car = await getGarageCar(carId);
+        if (!car) return;
+        editingCarId = carId;
+        fillModalFromCar(car);
+        setModalMode("edit", carTitle);
+        dialog.showModal();
+      } catch (err) {
+        console.error(err);
+      }
     });
   });
 
@@ -811,15 +925,25 @@ function wireAddCarModal() {
       ? Number.parseInt(normalizedMileageText.replace(/[^\d]/g, ""), 10)
       : null;
 
+    const nextPayload = {
+      title: `${b} · ${m} · ${y}`,
+      linkUrl,
+      purchasePrice: normalizedPurchasePrice,
+      mileage: Number.isFinite(normalizedMileage) ? normalizedMileage : null,
+    };
+
     try {
-      await appendCarCard({
-        title: `${b} · ${m} · ${y}`,
-        linkUrl,
-        purchasePrice: normalizedPurchasePrice,
-        mileage: Number.isFinite(normalizedMileage) ? normalizedMileage : null,
-      });
+      if (editingCarId) {
+        await updateGarageCar(editingCarId, nextPayload);
+        await renderGarageCards();
+        broadcastGarageInvalidate();
+      } else {
+        await appendCarCard(nextPayload);
+      }
       dialog.close();
+      editingCarId = null;
       resetModalForm();
+      setModalMode("add");
     } catch (err) {
       console.error(err);
     }
@@ -827,6 +951,12 @@ function wireAddCarModal() {
 
   dialog.querySelectorAll("[data-modal-close]").forEach((btn) => {
     btn.addEventListener("click", () => dialog.close());
+  });
+
+  dialog.addEventListener("close", () => {
+    editingCarId = null;
+    setModalMode("add");
+    resetModalForm();
   });
 
   dialog.addEventListener("click", (e) => {
