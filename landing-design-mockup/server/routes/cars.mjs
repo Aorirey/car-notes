@@ -47,16 +47,17 @@ export function createCarsRouter(pool) {
         res.status(400).json({ error: "Можно сравнить максимум 4 авто" });
         return;
       }
-      if (ids.some((id) => !UUID_RE.test(id))) {
-        res.status(400).json({ error: "Некорректный UUID в ids" });
+      const validIds = ids.filter((id) => UUID_RE.test(id));
+      if (!validIds.length) {
+        res.json([]);
         return;
       }
 
       const { rows } = await pool.query(`SELECT * FROM garage_cars WHERE id = ANY($1::uuid[])`, [
-        ids,
+        validIds,
       ]);
       const byId = new Map(rows.map((row) => [String(row.id), row]));
-      const ordered = ids.map((id) => byId.get(id)).filter(Boolean).map(rowToCar);
+      const ordered = validIds.map((id) => byId.get(id)).filter(Boolean).map(rowToCar);
       res.json(ordered);
     } catch (e) {
       logger.error(e);
@@ -117,11 +118,16 @@ export function createCarsRouter(pool) {
       }
       const linkUrl = String(req.body?.linkUrl ?? "").trim();
       const purchasePrice = sanitizePrice(String(req.body?.purchasePrice ?? ""));
+      const mileageRaw = req.body?.mileage;
+      const mileage =
+        mileageRaw === null || mileageRaw === undefined || mileageRaw === ""
+          ? null
+          : Number.parseInt(String(mileageRaw), 10);
       const { rows } = await pool.query(
-        `INSERT INTO garage_cars (title, link_url, purchase_price)
-         VALUES ($1, $2, $3)
+        `INSERT INTO garage_cars (title, link_url, purchase_price, mileage)
+         VALUES ($1, $2, $3, $4)
          RETURNING *`,
-        [title, linkUrl, purchasePrice],
+        [title, linkUrl, purchasePrice, Number.isNaN(mileage) ? null : mileage],
       );
       res.status(201).json(rowToCar(rows[0]));
     } catch (e) {

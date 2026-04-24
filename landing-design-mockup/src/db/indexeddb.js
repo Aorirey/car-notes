@@ -53,6 +53,10 @@ export async function addGarageCar(payload) {
   const db = await openGarageDb();
   const linkUrl = String(payload.linkUrl || "").trim();
   const purchasePrice = String(payload.purchasePrice || "").trim();
+  const mileageRaw = payload.mileage;
+  const mileage = mileageRaw === null || mileageRaw === undefined || mileageRaw === ""
+    ? null
+    : Number.parseInt(String(mileageRaw), 10);
   const row = {
     id: crypto.randomUUID(),
     title: String(payload.title || "").trim(),
@@ -78,6 +82,7 @@ export async function addGarageCar(payload) {
     purchasePrice,
     salePrice: "",
     investedAmount: "",
+    mileage: Number.isFinite(mileage) ? mileage : null,
   };
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");

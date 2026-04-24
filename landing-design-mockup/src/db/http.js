@@ -4,6 +4,7 @@
 import { applyAuthHeader, logout, redirectToLogin } from "../stores/auth.mjs";
 
 const API_BASE = (import.meta.env.VITE_API_BASE || "").replace(/\/$/, "");
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * @param {string} path
@@ -73,6 +74,7 @@ export async function addGarageCar(payload) {
       title: payload.title,
       linkUrl: payload.linkUrl ?? "",
       purchasePrice: payload.purchasePrice ?? "",
+      mileage: payload.mileage ?? null,
     },
   });
 }
@@ -109,7 +111,10 @@ export async function addCarPhoto(id, photo) {
  */
 export async function getCarsForComparison(ids) {
   const clean = Array.isArray(ids)
-    ? ids.map((id) => String(id).trim()).filter(Boolean).slice(0, 4)
+    ? ids
+        .map((id) => String(id).trim())
+        .filter((id) => id && UUID_RE.test(id))
+        .slice(0, 4)
     : [];
   if (!clean.length) return [];
   const params = new URLSearchParams();

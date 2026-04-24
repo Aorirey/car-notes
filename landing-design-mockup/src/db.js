@@ -65,7 +65,7 @@ export async function getGarageCar(id) {
 }
 
 /**
- * @param {{ title: string, linkUrl?: string, purchasePrice?: string }} payload
+ * @param {{ title: string, linkUrl?: string, purchasePrice?: string, mileage?: number | null }} payload
  * @returns {Promise<GarageCar>}
  */
 export async function addGarageCar(payload) {

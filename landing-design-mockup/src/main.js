@@ -64,6 +64,13 @@ function normalizePriceText(input) {
   return Number(digits).toLocaleString("ru-RU");
 }
 
+/** @param {unknown} input */
+function normalizeMileageText(input) {
+  const digits = String(input ?? "").replace(/[^\d]/g, "");
+  if (!digits) return "";
+  return Number(digits).toLocaleString("ru-RU");
+}
+
 
 function metaThemeKey() {
   const el = document.querySelector('meta[name="theme-storage-key"]');
@@ -247,6 +254,26 @@ function formatMoneyAmount(amount) {
 }
 
 /**
+ * @param {HTMLElement | null} mount
+ * @param {number} target
+ */
+function animateMoneyCounter(mount, target) {
+  if (!(mount instanceof HTMLElement)) return;
+  const finalValue = Math.max(0, Math.trunc(target));
+  const duration = 1200;
+  const start = performance.now();
+  const easeOutCubic = (t) => 1 - (1 - t) ** 3;
+
+  const tick = (now) => {
+    const progress = Math.min(1, (now - start) / duration);
+    const current = Math.round(finalValue * easeOutCubic(progress));
+    mount.textContent = formatMoneyAmount(current);
+    if (progress < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+/**
  * @param {import("./db.js").GarageCar[]} soldCars
  */
 function renderSummaryPanel(soldCars) {
@@ -262,6 +289,8 @@ function renderSummaryPanel(soldCars) {
     totalInvested += parseMoneyAmount(car.investedAmount);
   }
   const totalProfit = totalSale - totalPurchase - totalInvested;
+  const goalAmount = 1200000;
+  const amountLeft = Math.max(0, goalAmount - totalProfit);
   panel.innerHTML = `
     <h2 class="font-display text-2xl font-medium tracking-tight text-ink-950 dark:text-white sm:text-3xl">
       Итоги
@@ -269,6 +298,19 @@ function renderSummaryPanel(soldCars) {
     <p class="mt-2 max-w-3xl text-sm text-ink-600 dark:text-ink-400">
       Чистая прибыль считается по проданным машинам: сумма продажи - сумма покупки - вложения.
     </p>
+    <div class="mt-8 flex min-h-[38vh] items-center justify-center">
+      <div class="w-full max-w-3xl rounded-3xl border border-accent-200/70 bg-gradient-to-br from-accent-100/70 via-white to-accent-50 p-8 text-center shadow-lg dark:border-accent-500/30 dark:from-accent-900/30 dark:via-ink-900 dark:to-ink-900">
+        <p class="text-base font-medium uppercase tracking-wide text-ink-700 dark:text-ink-200 sm:text-lg">
+          До Ляма двести осталось:
+        </p>
+        <p
+          data-summary-goal-left
+          class="mt-4 font-display text-4xl font-semibold tracking-tight text-accent-700 drop-shadow-sm dark:text-accent-300 sm:text-6xl"
+        >
+          ${formatMoneyAmount(amountLeft)}
+        </p>
+      </div>
+    </div>
     <div class="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <article class="rounded-2xl border border-ink-200 bg-white p-5 dark:border-ink-700 dark:bg-ink-900">
         <p class="text-xs uppercase tracking-wide text-ink-500 dark:text-ink-400">Продано авто</p>
@@ -290,6 +332,7 @@ function renderSummaryPanel(soldCars) {
       </article>
     </div>
   `;
+  animateMoneyCounter(panel.querySelector("[data-summary-goal-left]"), amountLeft);
 }
 
 /** @param {HTMLElement} article @param {string} id */
@@ -570,8 +613,8 @@ async function renderGarageCards() {
   emptySold?.classList.toggle("hidden", sold.length > 0);
 }
 
-async function appendCarCard({ title, linkUrl = "", purchasePrice = "" }) {
-  await addGarageCar({ title, linkUrl, purchasePrice });
+async function appendCarCard({ title, linkUrl = "", purchasePrice = "", mileage = null }) {
+  await addGarageCar({ title, linkUrl, purchasePrice, mileage });
   await renderGarageCards();
   broadcastGarageInvalidate();
   const list = document.getElementById("user-car-cards-list");
@@ -632,6 +675,7 @@ function wireAddCarModal() {
   const year = document.getElementById("modal-car-year");
   const link = document.getElementById("modal-car-link");
   const purchasePrice = document.getElementById("modal-car-purchase-price");
+  const mileage = document.getElementById("modal-car-mileage");
   const form = document.getElementById("add-car-form");
   if (
     !cfg ||
@@ -641,7 +685,8 @@ function wireAddCarModal() {
     !model ||
     !year ||
     !form ||
-    !purchasePrice
+    !purchasePrice ||
+    !mileage
   ) {
     return;
   }
@@ -662,6 +707,8 @@ function wireAddCarModal() {
   if (linkHint) linkHint.textContent = cfg.linkHint ?? "";
   const lbPurchasePrice = dialog.querySelector("[data-modal-label-purchase-price]");
   if (lbPurchasePrice) lbPurchasePrice.textContent = "Цена покупки";
+  const lbMileage = dialog.querySelector("[data-modal-label-mileage]");
+  if (lbMileage) lbMileage.textContent = "Пробег (км)";
 
   const cancelBtn = dialog.querySelector("[data-modal-cancel-text]");
   const saveBtn = dialog.querySelector("[data-modal-save-text]");
@@ -711,6 +758,7 @@ function wireAddCarModal() {
     applySingleBrandDefault();
     if (link) link.value = "";
     purchasePrice.value = "";
+    mileage.value = "";
   }
 
   resetModalForm();
@@ -718,6 +766,9 @@ function wireAddCarModal() {
   model.addEventListener("change", syncYears);
   purchasePrice.addEventListener("blur", () => {
     purchasePrice.value = normalizePriceText(purchasePrice.value);
+  });
+  mileage.addEventListener("blur", () => {
+    mileage.value = normalizeMileageText(mileage.value);
   });
 
   openBtns.forEach((openBtn) => {
@@ -748,12 +799,17 @@ function wireAddCarModal() {
     }
 
     const normalizedPurchasePrice = normalizePriceText(purchasePrice.value);
+    const normalizedMileageText = normalizeMileageText(mileage.value);
+    const normalizedMileage = normalizedMileageText
+      ? Number.parseInt(normalizedMileageText.replace(/[^\d]/g, ""), 10)
+      : null;
 
     try {
       await appendCarCard({
         title: `${b} · ${m} · ${y}`,
         linkUrl,
         purchasePrice: normalizedPurchasePrice,
+        mileage: Number.isFinite(normalizedMileage) ? normalizedMileage : null,
       });
       dialog.close();
       resetModalForm();
