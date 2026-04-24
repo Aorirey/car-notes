@@ -144,6 +144,8 @@ export function createCarsRouter(pool) {
         if (camel === "mileage") {
           v = v === "" ? null : Number.parseInt(String(v), 10);
           if (v !== null && Number.isNaN(v)) continue;
+        } else if (camel === "purchasePrice" || camel === "salePrice" || camel === "investedAmount") {
+          v = sanitizePrice(v);
         } else if (camel === "photos") {
           v = JSON.stringify(Array.isArray(v) ? v : []);
           sets.push(`${col} = $${i++}::jsonb`);

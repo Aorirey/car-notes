@@ -77,6 +77,7 @@ export async function addGarageCar(payload) {
     listingStatus: "listed",
     purchasePrice,
     salePrice: "",
+    investedAmount: "",
   };
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");

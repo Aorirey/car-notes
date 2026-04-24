@@ -1,0 +1,2 @@
+ALTER TABLE garage_cars
+  ADD COLUMN IF NOT EXISTS invested_amount TEXT NOT NULL DEFAULT '';

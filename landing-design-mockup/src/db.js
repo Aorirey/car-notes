@@ -30,6 +30,7 @@
  *   listingStatus?: string,
  *   purchasePrice?: string,
  *   salePrice?: string,
+ *   investedAmount?: string,
  *   vin?: string,
  *   mileage?: number | null,
  *   status?: string,

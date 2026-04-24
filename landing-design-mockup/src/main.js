@@ -234,6 +234,64 @@ function carListingStatus(car) {
   return "listed";
 }
 
+/** @param {unknown} input */
+function parseMoneyAmount(input) {
+  const digits = String(input ?? "").replace(/[^\d]/g, "");
+  if (!digits) return 0;
+  return Number.parseInt(digits, 10) || 0;
+}
+
+/** @param {number} amount */
+function formatMoneyAmount(amount) {
+  return `${Math.trunc(amount).toLocaleString("ru-RU")} ₽`;
+}
+
+/**
+ * @param {import("./db.js").GarageCar[]} soldCars
+ */
+function renderSummaryPanel(soldCars) {
+  const panel = document.querySelector('[data-site-panel="summary"]');
+  if (!(panel instanceof HTMLElement)) return;
+  const cars = Array.isArray(soldCars) ? soldCars : [];
+  let totalSale = 0;
+  let totalPurchase = 0;
+  let totalInvested = 0;
+  for (const car of cars) {
+    totalSale += parseMoneyAmount(car.salePrice);
+    totalPurchase += parseMoneyAmount(car.purchasePrice);
+    totalInvested += parseMoneyAmount(car.investedAmount);
+  }
+  const totalProfit = totalSale - totalPurchase - totalInvested;
+  panel.innerHTML = `
+    <h2 class="font-display text-2xl font-medium tracking-tight text-ink-950 dark:text-white sm:text-3xl">
+      Итоги
+    </h2>
+    <p class="mt-2 max-w-3xl text-sm text-ink-600 dark:text-ink-400">
+      Чистая прибыль считается по проданным машинам: сумма продажи - сумма покупки - вложения.
+    </p>
+    <div class="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <article class="rounded-2xl border border-ink-200 bg-white p-5 dark:border-ink-700 dark:bg-ink-900">
+        <p class="text-xs uppercase tracking-wide text-ink-500 dark:text-ink-400">Продано авто</p>
+        <p class="mt-2 text-2xl font-semibold text-ink-950 dark:text-white">${cars.length}</p>
+      </article>
+      <article class="rounded-2xl border border-ink-200 bg-white p-5 dark:border-ink-700 dark:bg-ink-900">
+        <p class="text-xs uppercase tracking-wide text-ink-500 dark:text-ink-400">Сумма продаж</p>
+        <p class="mt-2 text-2xl font-semibold text-ink-950 dark:text-white">${formatMoneyAmount(totalSale)}</p>
+      </article>
+      <article class="rounded-2xl border border-ink-200 bg-white p-5 dark:border-ink-700 dark:bg-ink-900">
+        <p class="text-xs uppercase tracking-wide text-ink-500 dark:text-ink-400">Затраты</p>
+        <p class="mt-2 text-2xl font-semibold text-ink-950 dark:text-white">${formatMoneyAmount(totalPurchase + totalInvested)}</p>
+      </article>
+      <article class="rounded-2xl border border-ink-200 bg-white p-5 dark:border-ink-700 dark:bg-ink-900">
+        <p class="text-xs uppercase tracking-wide text-ink-500 dark:text-ink-400">Чистая прибыль</p>
+        <p class="mt-2 text-2xl font-semibold ${
+          totalProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+        }">${formatMoneyAmount(totalProfit)}</p>
+      </article>
+    </div>
+  `;
+}
+
 /** @param {HTMLElement} article @param {string} id */
 function applyCompareCardState(article, id) {
   const active = comparisonStore.has(id);
@@ -356,7 +414,8 @@ function createCarCardElement(car, listKind) {
 
   const purchaseStr = car.purchasePrice != null ? String(car.purchasePrice).trim() : "";
   const saleStr = car.salePrice != null ? String(car.salePrice).trim() : "";
-  if (purchaseStr || saleStr) {
+  const investedStr = car.investedAmount != null ? String(car.investedAmount).trim() : "";
+  if (purchaseStr || saleStr || investedStr) {
     const sums = document.createElement("div");
     sums.className =
       "mt-2 space-y-0.5 text-left text-xs text-accent-200 sm:text-sm";
@@ -368,6 +427,11 @@ function createCarCardElement(car, listKind) {
     if (saleStr) {
       const p = document.createElement("p");
       p.textContent = `Продано за: ${saleStr}`;
+      sums.appendChild(p);
+    }
+    if (investedStr) {
+      const p = document.createElement("p");
+      p.textContent = `Вложено: ${investedStr}`;
       sums.appendChild(p);
     }
     inner.appendChild(sums);
@@ -499,6 +563,7 @@ async function renderGarageCards() {
   fillList(listListed, listed, "listed");
   fillList(listPurchased, purchased, "purchased");
   fillList(listSold, sold, "sold");
+  renderSummaryPanel(sold);
   if (listed.length) section.classList.remove("hidden");
   else section.classList.add("hidden");
   emptyPurchased?.classList.toggle("hidden", purchased.length > 0);
@@ -960,7 +1025,16 @@ function wireDealPriceModals() {
   const saleForm = document.getElementById("sale-price-form");
   const purchaseInput = document.getElementById("purchase-price-input");
   const saleInput = document.getElementById("sale-price-input");
-  if (!purchaseDialog || !saleDialog || !purchaseForm || !saleForm || !purchaseInput || !saleInput) {
+  const saleInvestedInput = document.getElementById("sale-invested-input");
+  if (
+    !purchaseDialog ||
+    !saleDialog ||
+    !purchaseForm ||
+    !saleForm ||
+    !purchaseInput ||
+    !saleInput ||
+    !saleInvestedInput
+  ) {
     return;
   }
 
@@ -976,8 +1050,14 @@ function wireDealPriceModals() {
   const sLabel = saleDialog.querySelector("[data-sale-label]");
   if (sLabel) sLabel.textContent = deal.saleAmountLabel ?? "Сумма продажи";
   saleInput.placeholder = deal.saleAmountPlaceholder ?? "";
+  const sInvestedLabel = saleDialog.querySelector("[data-sale-invested-label]");
+  if (sInvestedLabel) sInvestedLabel.textContent = deal.saleInvestedAmountLabel ?? "Сколько вложено";
+  saleInvestedInput.placeholder = deal.saleInvestedAmountPlaceholder ?? "Например: 30 000 ₽";
   const sHint = saleDialog.querySelector("[data-sale-hint]");
-  if (sHint) sHint.textContent = deal.saleHint ?? "";
+  if (sHint) {
+    sHint.textContent =
+      deal.saleHint ?? "Укажите сумму продажи и сумму всех вложений по машине.";
+  }
 
   const pCancel = purchaseDialog.querySelector("[data-purchase-cancel-text]");
   if (pCancel) pCancel.textContent = deal.purchaseCancel ?? "Отмена";
@@ -998,6 +1078,7 @@ function wireDealPriceModals() {
   }
   function resetSaleForm() {
     saleInput.value = "";
+    saleInvestedInput.value = "";
   }
 
   purchaseDialog.addEventListener("close", () => {
@@ -1015,6 +1096,15 @@ function wireDealPriceModals() {
       saleCarLine.textContent = "";
       saleCarLine.classList.add("hidden");
     }
+  });
+  purchaseInput.addEventListener("blur", () => {
+    purchaseInput.value = normalizePriceText(purchaseInput.value);
+  });
+  saleInput.addEventListener("blur", () => {
+    saleInput.value = normalizePriceText(saleInput.value);
+  });
+  saleInvestedInput.addEventListener("blur", () => {
+    saleInvestedInput.value = normalizePriceText(saleInvestedInput.value);
   });
 
   function onCarListClick(e) {
@@ -1059,7 +1149,7 @@ function wireDealPriceModals() {
       purchaseDialog.close();
       return;
     }
-    const amount = purchaseInput.value.trim();
+    const amount = normalizePriceText(purchaseInput.value);
     if (!amount) return;
     try {
       await updateGarageCar(purchaseContextCarId, {
@@ -1081,12 +1171,14 @@ function wireDealPriceModals() {
       saleDialog.close();
       return;
     }
-    const amount = saleInput.value.trim();
-    if (!amount) return;
+    const amount = normalizePriceText(saleInput.value);
+    const investedAmount = normalizePriceText(saleInvestedInput.value);
+    if (!amount || !investedAmount) return;
     try {
       await updateGarageCar(saleContextCarId, {
         listingStatus: "sold",
         salePrice: amount,
+        investedAmount,
       });
       await renderGarageCards();
       broadcastGarageInvalidate();
