@@ -783,6 +783,7 @@ function wireAddCarModal() {
   if (cancelBtn) cancelBtn.textContent = cfg.cancelLabel;
   if (saveBtn) saveBtn.textContent = addSaveText;
   let editingCarId = null;
+  let editingFallbackParts = null;
 
   function yearsOptionsForModel(modelKey) {
     const yb = cfg.yearsByModel;
@@ -813,6 +814,21 @@ function wireAddCarModal() {
     syncYears();
   }
 
+  /**
+   * @param {HTMLSelectElement} select
+   * @param {string} value
+   * @param {string} label
+   */
+  function ensureSelectOption(select, value, label) {
+    if (!value) return;
+    const exists = Array.from(select.options).some((opt) => opt.value === value);
+    if (exists) return;
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label || value;
+    select.appendChild(option);
+  }
+
   /** @param {HTMLSelectElement} select @param {string} label */
   function selectByLabel(select, label) {
     const target = String(label ?? "").trim().toLowerCase();
@@ -831,19 +847,25 @@ function wireAddCarModal() {
     resetModalForm();
     if (!car) return;
     const parts = splitTitleParts(car.title);
+    editingFallbackParts = parts;
     if (parts.brand) {
-      selectByLabel(brand, parts.brand);
+      if (!selectByLabel(brand, parts.brand)) {
+        ensureSelectOption(brand, `legacy-brand-${parts.brand}`, parts.brand);
+        brand.value = `legacy-brand-${parts.brand}`;
+      }
       syncModels();
     }
     if (parts.model) {
-      selectByLabel(model, parts.model);
+      if (!selectByLabel(model, parts.model)) {
+        ensureSelectOption(model, `legacy-model-${parts.model}`, parts.model);
+        model.value = `legacy-model-${parts.model}`;
+      }
       syncYears();
     }
     if (parts.year) {
       const yearValue = parts.year.replace(/[^\d]/g, "");
-      if (Array.from(year.options).some((opt) => opt.value === yearValue)) {
-        year.value = yearValue;
-      }
+      ensureSelectOption(year, yearValue, yearValue);
+      if (yearValue) year.value = yearValue;
     }
     if (link) link.value = String(car.linkUrl ?? "").trim();
     purchasePrice.value = normalizePriceText(car.purchasePrice ?? "");
@@ -929,9 +951,25 @@ function wireAddCarModal() {
     const b = brand.options[brand.selectedIndex]?.text?.trim() ?? "";
     const m = model.options[model.selectedIndex]?.text?.trim() ?? "";
     const y = year.options[year.selectedIndex]?.text?.trim() ?? "";
-    if (!b || !m || !y) return;
-    if (b.startsWith("Выберите") || m.startsWith("Выберите") || m.startsWith("Сначала")) return;
-    if (y === "Год выпуска" || y.startsWith("Сначала")) return;
+    const brandText =
+      b && !b.startsWith("Выберите")
+        ? b
+        : editingFallbackParts?.brand
+          ? editingFallbackParts.brand
+          : "";
+    const modelText =
+      m && !m.startsWith("Выберите") && !m.startsWith("Сначала")
+        ? m
+        : editingFallbackParts?.model
+          ? editingFallbackParts.model
+          : "";
+    const yearText =
+      y && y !== "Год выпуска" && !y.startsWith("Сначала")
+        ? y
+        : editingFallbackParts?.year
+          ? editingFallbackParts.year
+          : "";
+    if (!brandText || !modelText || !yearText) return;
 
     const rawLink = link?.value?.trim() ?? "";
     const linkUrl = normalizeExternalUrl(rawLink);
@@ -949,7 +987,7 @@ function wireAddCarModal() {
       : null;
 
     const nextPayload = {
-      title: `${b} · ${m} · ${y}`,
+      title: `${brandText} · ${modelText} · ${yearText}`,
       linkUrl,
       purchasePrice: normalizedPurchasePrice,
       mileage: Number.isFinite(normalizedMileage) ? normalizedMileage : null,
@@ -965,6 +1003,7 @@ function wireAddCarModal() {
       }
       dialog.close();
       editingCarId = null;
+      editingFallbackParts = null;
       resetModalForm();
       setModalMode("add");
     } catch (err) {
@@ -978,6 +1017,7 @@ function wireAddCarModal() {
 
   dialog.addEventListener("close", () => {
     editingCarId = null;
+    editingFallbackParts = null;
     setModalMode("add");
     resetModalForm();
   });
