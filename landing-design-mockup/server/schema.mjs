@@ -37,6 +37,12 @@ const MIGRATE_COLUMNS = [
   `ALTER TABLE garage_cars ADD COLUMN IF NOT EXISTS sale_price TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE garage_cars ADD COLUMN IF NOT EXISTS invested_amount TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE garage_cars ADD COLUMN IF NOT EXISTS color TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE garage_cars ADD COLUMN IF NOT EXISTS vin VARCHAR(17)`,
+  `ALTER TABLE garage_cars ADD COLUMN IF NOT EXISTS mileage INTEGER`,
+  `ALTER TABLE garage_cars ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'found'`,
+  `ALTER TABLE garage_cars ADD COLUMN IF NOT EXISTS assigned_to UUID`,
+  `ALTER TABLE garage_cars ADD COLUMN IF NOT EXISTS photos JSONB NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE garage_cars ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
 ];
 
 /** @param {{ query: (sql: string) => Promise<unknown> }} pool */

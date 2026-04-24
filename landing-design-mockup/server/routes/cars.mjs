@@ -179,7 +179,6 @@ export function createCarsRouter(pool) {
         res.status(400).json({ error: "Нет полей для обновления" });
         return;
       }
-      sets.push(`updated_at = NOW()`);
       values.push(id);
       const sql = `UPDATE garage_cars SET ${sets.join(", ")} WHERE id = $${i} RETURNING *`;
       const { rows } = await pool.query(sql, values);
@@ -222,7 +221,7 @@ export function createCarsRouter(pool) {
 
       const { rows } = await pool.query(
         `UPDATE garage_cars
-         SET status = $1, updated_at = NOW()
+         SET status = $1
          WHERE id = $2
          RETURNING *`,
         [status, id],
@@ -252,8 +251,7 @@ export function createCarsRouter(pool) {
       const payload = JSON.stringify([photo]);
       const { rows } = await pool.query(
         `UPDATE garage_cars
-         SET photos = COALESCE(photos, '[]'::jsonb) || $1::jsonb,
-             updated_at = NOW()
+         SET photos = COALESCE(photos, '[]'::jsonb) || $1::jsonb
          WHERE id = $2
          RETURNING *`,
         [payload, id],
