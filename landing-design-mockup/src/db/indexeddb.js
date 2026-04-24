@@ -46,12 +46,13 @@ export async function getGarageCar(id) {
 }
 
 /**
- * @param {{ title: string, linkUrl?: string }} payload
+ * @param {{ title: string, linkUrl?: string, purchasePrice?: string }} payload
  * @returns {Promise<object>}
  */
 export async function addGarageCar(payload) {
   const db = await openGarageDb();
   const linkUrl = String(payload.linkUrl || "").trim();
+  const purchasePrice = String(payload.purchasePrice || "").trim();
   const row = {
     id: crypto.randomUUID(),
     title: String(payload.title || "").trim(),
@@ -68,10 +69,14 @@ export async function addGarageCar(payload) {
     dentsDamage: "",
     repaintWhere: "",
     repaintDegree: "",
+    color: "",
     generalCondition: "",
     desc1: "",
     desc2: "",
     desc3: "",
+    listingStatus: "listed",
+    purchasePrice,
+    salePrice: "",
   };
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
@@ -107,4 +112,11 @@ export async function deleteGarageCar(id) {
     tx.onerror = () => reject(tx.error);
     tx.objectStore(STORE).delete(id);
   });
+}
+
+/** @param {string[]} ids */
+export async function getCarsForComparison(ids) {
+  const all = await getAllGarageCars();
+  const byId = new Map(all.map((car) => [String(car.id), car]));
+  return ids.map((id) => byId.get(String(id))).filter(Boolean);
 }

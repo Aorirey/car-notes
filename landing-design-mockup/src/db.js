@@ -22,10 +22,20 @@
  *   dentsDamage?: string,
  *   repaintWhere?: string,
  *   repaintDegree?: string,
+ *   color?: string,
  *   generalCondition?: string,
  *   desc1?: string,
  *   desc2?: string,
  *   desc3?: string,
+ *   listingStatus?: string,
+ *   purchasePrice?: string,
+ *   salePrice?: string,
+ *   vin?: string,
+ *   mileage?: number | null,
+ *   status?: string,
+ *   assignedTo?: string | null,
+ *   photos?: unknown[],
+ *   updatedAt?: number | null,
  * }} GarageCar
  */
 
@@ -43,9 +53,9 @@ function getImpl() {
   return implPromise;
 }
 
-/** @returns {Promise<GarageCar[]>} */
-export async function getAllGarageCars() {
-  return (await getImpl()).getAllGarageCars();
+/** @param {{ status?: string, assignedTo?: string }} [filters] @returns {Promise<GarageCar[]>} */
+export async function getAllGarageCars(filters) {
+  return (await getImpl()).getAllGarageCars(filters);
 }
 
 /** @param {string} id @returns {Promise<GarageCar | null>} */
@@ -54,7 +64,7 @@ export async function getGarageCar(id) {
 }
 
 /**
- * @param {{ title: string, linkUrl?: string }} payload
+ * @param {{ title: string, linkUrl?: string, purchasePrice?: string }} payload
  * @returns {Promise<GarageCar>}
  */
 export async function addGarageCar(payload) {
@@ -72,4 +82,21 @@ export async function updateGarageCar(id, patch) {
 /** @param {string} id */
 export async function deleteGarageCar(id) {
   return (await getImpl()).deleteGarageCar(id);
+}
+
+/** @param {string} id @param {string} status */
+export async function updateCarStatus(id, status) {
+  return (await getImpl()).updateCarStatus(id, status);
+}
+
+/** @param {string} id @param {unknown} photo */
+export async function addCarPhoto(id, photo) {
+  return (await getImpl()).addCarPhoto(id, photo);
+}
+
+/** @param {string[]} ids @returns {Promise<GarageCar[]>} */
+export async function getCarsForComparison(ids) {
+  const impl = await getImpl();
+  if (typeof impl.getCarsForComparison !== "function") return [];
+  return impl.getCarsForComparison(ids);
 }

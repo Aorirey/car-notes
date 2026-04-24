@@ -71,10 +71,49 @@
           </a>
           <div class="flex flex-1 flex-wrap items-center justify-end gap-2 sm:gap-3">
             <nav
-              class="hidden items-center gap-6 text-sm text-ink-600 dark:text-ink-300 md:flex md:gap-8"
+              role="tablist"
+              aria-label="Учёт сделок"
+              class="hidden items-center gap-1 text-sm text-ink-600 dark:text-ink-300 md:flex md:gap-1"
             >
-              <a data-link-catalog href="#" class="hover:text-ink-950 dark:hover:text-white">Каталог</a>
-              <a data-link-friends href="#" class="hover:text-ink-950 dark:hover:text-white">Друзья</a>
+              <a
+                role="tab"
+                aria-selected="false"
+                tabindex="0"
+                data-site-tab="purchased"
+                data-link-purchased
+                href="#"
+                class="site-nav-tab rounded-lg border border-transparent px-3 py-1.5 font-medium transition hover:border-ink-200/80 hover:text-ink-950 dark:hover:border-ink-600 dark:hover:text-white"
+                >Куплено</a
+              >
+              <a
+                role="tab"
+                aria-selected="false"
+                tabindex="0"
+                data-site-tab="sold"
+                data-link-sold
+                href="#"
+                class="site-nav-tab rounded-lg border border-transparent px-3 py-1.5 font-medium transition hover:border-ink-200/80 hover:text-ink-950 dark:hover:border-ink-600 dark:hover:text-white"
+                >Продано</a
+              >
+              <a
+                role="tab"
+                aria-selected="false"
+                tabindex="0"
+                data-site-tab="summary"
+                data-link-summary
+                href="#"
+                class="site-nav-tab rounded-lg border border-transparent px-3 py-1.5 font-medium transition hover:border-ink-200/80 hover:text-ink-950 dark:hover:border-ink-600 dark:hover:text-white"
+                >Итог</a
+              >
+              <a
+                role="tab"
+                aria-selected="false"
+                tabindex="0"
+                data-site-tab="compare"
+                href="#"
+                class="site-nav-tab rounded-lg border border-transparent px-3 py-1.5 font-medium transition hover:border-ink-200/80 hover:text-ink-950 dark:hover:border-ink-600 dark:hover:text-white"
+                >Сравнение</a
+              >
             </nav>
             <button
               type="button"
@@ -179,6 +218,7 @@
         </div>
       </header>
 
+      <div data-site-panel="garage">
       <!-- Hero -->
       <section class="relative overflow-hidden pb-24 pt-28 sm:pt-32">
         <div
@@ -249,9 +289,73 @@
       >
         <div
           id="user-car-cards-list"
-          class="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5"
+          class="js-car-cards-list grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5"
         ></div>
       </section>
+      </div>
+
+      <div
+        data-site-panel="purchased"
+        hidden
+        class="mx-auto min-h-[min(100dvh,48rem)] max-w-6xl px-6 pb-16 pt-28 sm:pb-20 sm:pt-32"
+        aria-label="Куплено"
+      >
+        <h2
+          class="font-display text-2xl font-medium tracking-tight text-ink-950 dark:text-white sm:text-3xl"
+        >
+          Куплено
+        </h2>
+        <p class="mt-2 max-w-2xl text-sm text-ink-600 dark:text-ink-400">
+          Машины, для которых указана сумма покупки.
+        </p>
+        <div
+          id="purchased-car-cards-list"
+          class="js-car-cards-list mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5"
+        ></div>
+        <p
+          id="purchased-empty-hint"
+          class="mt-10 hidden text-center text-sm text-ink-500 dark:text-ink-400"
+        >
+          Пока нет купленных машин.
+        </p>
+      </div>
+      <div
+        data-site-panel="sold"
+        hidden
+        class="mx-auto min-h-[min(100dvh,48rem)] max-w-6xl px-6 pb-16 pt-28 sm:pb-20 sm:pt-32"
+        aria-label="Продано"
+      >
+        <h2
+          class="font-display text-2xl font-medium tracking-tight text-ink-950 dark:text-white sm:text-3xl"
+        >
+          Продано
+        </h2>
+        <p class="mt-2 max-w-2xl text-sm text-ink-600 dark:text-ink-400">
+          Машины, для которых указана сумма продажи.
+        </p>
+        <div
+          id="sold-car-cards-list"
+          class="js-car-cards-list mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5"
+        ></div>
+        <p
+          id="sold-empty-hint"
+          class="mt-10 hidden text-center text-sm text-ink-500 dark:text-ink-400"
+        >
+          Пока нет проданных машин.
+        </p>
+      </div>
+      <div
+        data-site-panel="summary"
+        hidden
+        class="mx-auto min-h-[min(100dvh,48rem)] max-w-6xl px-6 pb-16 pt-28 sm:pb-20 sm:pt-32"
+        aria-label="Итог"
+      ></div>
+      <div
+        data-site-panel="compare"
+        hidden
+        class="mx-auto min-h-[min(100dvh,48rem)] max-w-6xl px-6 pb-16 pt-28 sm:pb-20 sm:pt-32"
+        aria-label="Сравнение"
+      ></div>
     </div>
 
     <dialog
@@ -353,6 +457,26 @@
               class="mt-1.5 text-xs leading-relaxed text-ink-500 dark:text-ink-400"
             ></p>
           </div>
+          <div>
+            <label
+              data-modal-label-purchase-price
+              for="modal-car-purchase-price"
+              class="block text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-ink-400"
+              >Цена покупки</label
+            >
+            <div class="mt-1.5 flex items-center gap-2">
+              <input
+                type="text"
+                id="modal-car-purchase-price"
+                name="purchasePrice"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="Например: 1 250 000"
+                class="w-full rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-900 shadow-sm outline-none transition placeholder:text-ink-400 focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 dark:border-ink-600 dark:bg-ink-950 dark:text-ink-100 dark:placeholder:text-ink-500 dark:focus:border-accent-400 dark:focus:ring-accent-400/20"
+              />
+            </div>
+            <p class="mt-1.5 text-xs leading-relaxed text-ink-500 dark:text-ink-400">Введите цену вручную.</p>
+          </div>
         </div>
         <div class="mt-8 flex flex-wrap justify-end gap-2 border-t border-ink-200/80 pt-6 dark:border-ink-700/80">
           <button type="button" class="btn btn-ghost" data-modal-close data-modal-cancel-text>
@@ -430,6 +554,21 @@
               class="mt-1.5 w-full resize-y rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-900 shadow-sm outline-none transition placeholder:text-ink-400 focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 dark:border-ink-600 dark:bg-ink-950 dark:text-ink-100 dark:placeholder:text-ink-500 dark:focus:border-accent-400 dark:focus:ring-accent-400/20"
               placeholder=""
             ></textarea>
+          </div>
+          <div>
+            <label
+              for="desc-color"
+              class="block text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-ink-400"
+              >Цвет</label
+            >
+            <input
+              type="text"
+              id="desc-color"
+              name="color"
+              autocomplete="off"
+              class="mt-1.5 w-full rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-900 shadow-sm outline-none transition placeholder:text-ink-400 focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 dark:border-ink-600 dark:bg-ink-950 dark:text-ink-100 dark:placeholder:text-ink-500 dark:focus:border-accent-400 dark:focus:ring-accent-400/20"
+              placeholder="Например: тёмно-синий"
+            />
           </div>
           <div class="space-y-3 rounded-xl border border-ink-200/80 p-4 dark:border-ink-600/80">
             <p class="text-xs font-semibold uppercase tracking-wide text-ink-600 dark:text-ink-300">
@@ -596,6 +735,133 @@
             Отмена
           </button>
           <button type="submit" class="btn btn-primary" data-desc-save-text>Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog
+      id="purchase-price-dialog"
+      class="w-[calc(100%-2rem)] max-w-md rounded-2xl border border-ink-200 bg-white p-6 text-ink-900 shadow-2xl backdrop:bg-ink-950/50 backdrop:backdrop-blur-sm dark:border-ink-700 dark:bg-ink-900 dark:text-ink-100"
+    >
+      <form id="purchase-price-form" class="block">
+        <div class="flex items-start justify-between gap-3">
+          <h2
+            data-purchase-modal-title
+            class="font-display text-xl font-medium tracking-tight text-ink-950 dark:text-white"
+          >
+            Куплено
+          </h2>
+          <button
+            type="button"
+            class="btn -mr-1 -mt-1 shrink-0 rounded-full p-2 text-ink-500 hover:bg-ink-100 hover:text-ink-900 dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-white"
+            data-purchase-modal-close
+            aria-label="Закрыть"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+        <p
+          class="mt-3 hidden text-sm text-ink-500 dark:text-ink-400"
+          data-purchase-car-line
+        ></p>
+        <p class="mt-2 text-sm text-ink-600 dark:text-ink-400" data-purchase-hint></p>
+        <div class="mt-5">
+          <label
+            for="purchase-price-input"
+            class="block text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-ink-400"
+            data-purchase-label
+            >Сумма покупки</label
+          >
+          <input
+            id="purchase-price-input"
+            name="purchasePrice"
+            type="text"
+            autocomplete="off"
+            required
+            class="mt-1.5 w-full rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-900 shadow-sm outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 dark:border-ink-600 dark:bg-ink-950 dark:text-ink-100 dark:focus:border-accent-400 dark:focus:ring-accent-400/20"
+          />
+        </div>
+        <div class="mt-8 flex flex-wrap justify-end gap-2 border-t border-ink-200/80 pt-6 dark:border-ink-700/80">
+          <button type="button" class="btn btn-ghost" data-purchase-modal-close data-purchase-cancel-text>
+            Отмена
+          </button>
+          <button type="submit" class="btn btn-primary" data-purchase-save-text>Сохранить</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog
+      id="sale-price-dialog"
+      class="w-[calc(100%-2rem)] max-w-md rounded-2xl border border-ink-200 bg-white p-6 text-ink-900 shadow-2xl backdrop:bg-ink-950/50 backdrop:backdrop-blur-sm dark:border-ink-700 dark:bg-ink-900 dark:text-ink-100"
+    >
+      <form id="sale-price-form" class="block">
+        <div class="flex items-start justify-between gap-3">
+          <h2
+            data-sale-modal-title
+            class="font-display text-xl font-medium tracking-tight text-ink-950 dark:text-white"
+          >
+            Продано
+          </h2>
+          <button
+            type="button"
+            class="btn -mr-1 -mt-1 shrink-0 rounded-full p-2 text-ink-500 hover:bg-ink-100 hover:text-ink-900 dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-white"
+            data-sale-modal-close
+            aria-label="Закрыть"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+        <p class="mt-3 hidden text-sm text-ink-500 dark:text-ink-400" data-sale-car-line></p>
+        <p class="mt-2 text-sm text-ink-600 dark:text-ink-400" data-sale-hint></p>
+        <div class="mt-5">
+          <label
+            for="sale-price-input"
+            class="block text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-ink-400"
+            data-sale-label
+            >Сумма продажи</label
+          >
+          <input
+            id="sale-price-input"
+            name="salePrice"
+            type="text"
+            autocomplete="off"
+            required
+            class="mt-1.5 w-full rounded-xl border border-ink-200 bg-white px-3 py-2.5 text-sm text-ink-900 shadow-sm outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20 dark:border-ink-600 dark:bg-ink-950 dark:text-ink-100 dark:focus:border-accent-400 dark:focus:ring-accent-400/20"
+          />
+        </div>
+        <div class="mt-8 flex flex-wrap justify-end gap-2 border-t border-ink-200/80 pt-6 dark:border-ink-700/80">
+          <button type="button" class="btn btn-ghost" data-sale-modal-close data-sale-cancel-text>
+            Отмена
+          </button>
+          <button type="submit" class="btn btn-primary" data-sale-save-text>Сохранить</button>
         </div>
       </form>
     </dialog>

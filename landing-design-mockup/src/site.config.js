@@ -28,8 +28,10 @@ export default {
   /** Все внешние ссылки лендинга. Замените на URL своего приложения / разделов. */
   links: {
     logo: "#",
-    catalog: "#",
-    friends: "#",
+    /** Вкладки «Куплено» / «Продано» / «Итог» (пока якоря; позже — маршруты приложения). */
+    purchased: "#",
+    sold: "#",
+    summary: "#",
     discover: "#",
     showcaseAll: "#",
     /** База для карточек витрины (якорь или каталог). */
@@ -39,6 +41,26 @@ export default {
   copy: {
     heroChip: "Перекупы перекупы душа нараспашку",
     heroCtaPrimary: "Добавить машину",
+  },
+
+  /** Кнопки «Куплено» / «Продано» и модалки сумм на карточке. */
+  dealFlow: {
+    boughtButton: "Куплено",
+    soldButton: "Продано",
+    purchaseModalTitle: "Куплено",
+    purchaseCarContextPrefix: "Машина:",
+    purchaseAmountLabel: "Сумма покупки",
+    purchaseAmountPlaceholder: "Например: 180 000 ₽",
+    purchaseHint: "Укажите сумму, за которую машина была куплена.",
+    purchaseSave: "Сохранить",
+    purchaseCancel: "Отмена",
+    saleModalTitle: "Продано",
+    saleCarContextPrefix: "Машина:",
+    saleAmountLabel: "Сумма продажи",
+    saleAmountPlaceholder: "Например: 220 000 ₽",
+    saleHint: "Укажите сумму, за которую машина была продана.",
+    saleSave: "Сохранить",
+    saleCancel: "Отмена",
   },
 
   /** Модальное окно «Добавить машину»: подписи и варианты выпадающих списков. */
@@ -191,7 +213,7 @@ export default {
    */
   addDescriptionModal: {
     title: "Добавить описание",
-    openButtonLabel: "добавить описание",
+    openButtonLabel: "Добавить описание",
     carContextPrefix: "Автомобиль:",
     legalOptions: [
       { value: "", label: "— выберите —" },

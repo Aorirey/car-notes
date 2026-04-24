@@ -7,6 +7,37 @@ import {
   getAllGarageCars,
   updateGarageCar,
 } from "./db.js";
+import { buildCarMetaBlock } from "./pages/CarsPage.js";
+import { mountNotificationBell } from "./components/NotificationBell.js";
+import { mountComparePage } from "./pages/ComparePage.js";
+import { comparisonStore } from "./stores/comparisonStore.mjs";
+
+const GARAGE_BC_NAME = "car-notes-garage-sync";
+
+/** @type {BroadcastChannel | null} */
+let garageBroadcast = null;
+try {
+  if (typeof BroadcastChannel !== "undefined") {
+    garageBroadcast = new BroadcastChannel(GARAGE_BC_NAME);
+    garageBroadcast.addEventListener("message", (ev) => {
+      if (ev.data?.type === "invalidate") void renderGarageCards();
+    });
+  }
+} catch {
+  garageBroadcast = null;
+}
+
+function broadcastGarageInvalidate() {
+  try {
+    garageBroadcast?.postMessage({ type: "invalidate" });
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Счётчик гонок: не применять устаревший ответ GET после параллельных renderGarageCards. */
+let garageRenderSeq = 0;
+let comparePageApi = null;
 
 /** @param {unknown} input */
 function normalizeExternalUrl(input) {
@@ -25,6 +56,14 @@ function normalizeExternalUrl(input) {
   if (u.protocol !== "http:" && u.protocol !== "https:") return "";
   return u.href;
 }
+
+/** @param {unknown} input */
+function normalizePriceText(input) {
+  const digits = String(input ?? "").replace(/[^\d]/g, "");
+  if (!digits) return "";
+  return Number(digits).toLocaleString("ru-RU");
+}
+
 
 function metaThemeKey() {
   const el = document.querySelector('meta[name="theme-storage-key"]');
@@ -72,8 +111,9 @@ function applySite() {
   }
 
   const map = {
-    "link-catalog": site.links.catalog,
-    "link-friends": site.links.friends,
+    "link-purchased": site.links.purchased,
+    "link-sold": site.links.sold,
+    "link-summary": site.links.summary,
     "link-discover": site.links.discover,
     "link-showcase-all": site.links.showcaseAll,
   };
@@ -156,6 +196,8 @@ function carDescriptionPreviewLines(car) {
 
   const electrical = car.electrical != null ? String(car.electrical).trim() : "";
   if (electrical) lines.push(`Электрика: ${electrical}`);
+  const color = car.color != null ? String(car.color).trim() : "";
+  if (color) lines.push(`Цвет: ${color}`);
 
   const rust = formatWhereDegree(car.rustWhere, car.rustDegree, "Ржавчина");
   if (rust) lines.push(rust);
@@ -185,15 +227,67 @@ function carDescriptionPreviewLines(car) {
   return lines;
 }
 
+/** @param {import("./db.js").GarageCar} car */
+function carListingStatus(car) {
+  const s = car.listingStatus != null ? String(car.listingStatus).trim() : "";
+  if (s === "purchased" || s === "sold") return s;
+  return "listed";
+}
+
+/** @param {HTMLElement} article @param {string} id */
+function applyCompareCardState(article, id) {
+  const active = comparisonStore.has(id);
+  article.classList.toggle("ring-2", active);
+  article.classList.toggle("ring-accent-400", active);
+}
+
+function mountComparisonIndicator() {
+  let root = document.querySelector("[data-compare-indicator]");
+  if (root instanceof HTMLElement) return root;
+  root = document.createElement("div");
+  root.setAttribute("data-compare-indicator", "");
+  root.className = "fixed bottom-4 right-4 z-40 hidden";
+  root.innerHTML = `
+    <div class="rounded-xl border border-ink-300 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-ink-700 dark:bg-ink-900/95">
+      <div class="flex items-center gap-3">
+        <p data-compare-count class="text-sm font-medium text-ink-900 dark:text-ink-100">Сравнение (0/4)</p>
+        <button type="button" data-open-compare class="rounded-lg bg-accent-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-accent-600">
+          Открыть
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(root);
+  root.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.closest("[data-open-compare]")) {
+      document.dispatchEvent(new CustomEvent("car-notes:open-tab", { detail: { tab: "compare" } }));
+    }
+  });
+  return root;
+}
+
+function renderComparisonIndicator() {
+  const root = mountComparisonIndicator();
+  const countEl = root.querySelector("[data-compare-count]");
+  if (!(countEl instanceof HTMLElement)) return;
+  const count = comparisonStore.count();
+  countEl.textContent = `Сравнение (${count}/${comparisonStore.MAX_COMPARISON_ITEMS})`;
+  root.classList.toggle("hidden", count <= 0);
+}
+
 /**
  * @param {import("./db.js").GarageCar} car
+ * @param {"listed" | "purchased" | "sold"} listKind
  */
-function createCarCardElement(car) {
+function createCarCardElement(car, listKind) {
   const article = document.createElement("article");
   article.className =
     "car-card relative flex h-full min-h-[220px] flex-col overflow-hidden rounded-2xl border border-ink-200 bg-gradient-to-br from-ink-950 via-ink-900 to-ink-800 p-5 text-white dark:border-ink-700 sm:p-6";
   article.dataset.carId = car.id;
   article.setAttribute("aria-label", car.title);
+  applyCompareCardState(article, car.id);
 
   const noise = document.createElement("div");
   noise.className = "noise opacity-30";
@@ -258,6 +352,26 @@ function createCarCardElement(car) {
   head.appendChild(headMain);
   head.appendChild(delBtn);
   inner.appendChild(head);
+  inner.appendChild(buildCarMetaBlock(car));
+
+  const purchaseStr = car.purchasePrice != null ? String(car.purchasePrice).trim() : "";
+  const saleStr = car.salePrice != null ? String(car.salePrice).trim() : "";
+  if (purchaseStr || saleStr) {
+    const sums = document.createElement("div");
+    sums.className =
+      "mt-2 space-y-0.5 text-left text-xs text-accent-200 sm:text-sm";
+    if (purchaseStr) {
+      const p = document.createElement("p");
+      p.textContent = `Куплено за: ${purchaseStr}`;
+      sums.appendChild(p);
+    }
+    if (saleStr) {
+      const p = document.createElement("p");
+      p.textContent = `Продано за: ${saleStr}`;
+      sums.appendChild(p);
+    }
+    inner.appendChild(sums);
+  }
 
   const descLines = carDescriptionPreviewLines(car);
   if (descLines.length) {
@@ -270,14 +384,63 @@ function createCarCardElement(car) {
 
   const actions = document.createElement("div");
   actions.className = "mt-auto flex flex-wrap items-center gap-2 pt-4";
+  const compareBtn = document.createElement("button");
+  compareBtn.type = "button";
+  compareBtn.dataset.compareToggle = "";
+  compareBtn.className =
+    "btn inline-flex items-center gap-2 border border-white/35 bg-white/15 px-3 py-2 text-xs text-white hover:border-accent-400 hover:bg-accent-500 hover:text-white sm:text-sm";
+  compareBtn.innerHTML = `
+    <span class="inline-flex h-5 w-5 items-center justify-center rounded-full border border-current/40 bg-white/10">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" class="h-3.5 w-3.5" aria-hidden="true">
+        <path d="M8 3.25V12.75" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+        <path d="M3.25 8H12.75" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+      </svg>
+    </span>
+    <span>Сравнить</span>
+  `;
+  const alreadyInCompare = comparisonStore.has(car.id);
+  if (alreadyInCompare) {
+    compareBtn.classList.add("border-accent-300", "bg-accent-500/80");
+    compareBtn.innerHTML = `
+      <span class="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/40 bg-white/20">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5" aria-hidden="true">
+          <path fill-rule="evenodd" d="M16.704 5.29a1 1 0 0 1 .006 1.414l-7.06 7.12a1 1 0 0 1-1.418.006l-3.94-3.91a1 1 0 1 1 1.41-1.42l3.23 3.204 6.355-6.41a1 1 0 0 1 1.417-.004Z" clip-rule="evenodd" />
+        </svg>
+      </span>
+      <span>В сравнении</span>
+    `;
+  } else if (comparisonStore.count() >= comparisonStore.MAX_COMPARISON_ITEMS) {
+    compareBtn.title = "Максимум 4 авто для сравнения";
+  }
+  actions.appendChild(compareBtn);
   const descBtn = document.createElement("button");
   descBtn.type = "button";
   descBtn.dataset.openAddDescription = "";
   descBtn.className =
-    "btn bg-white px-3 py-2 text-xs text-ink-950 hover:bg-accent-500 hover:text-white sm:text-sm";
+    "btn border border-white/35 bg-white/15 px-3 py-2 text-xs text-white hover:border-accent-400 hover:bg-accent-500 hover:text-white sm:text-sm";
   descBtn.textContent =
-    site.addDescriptionModal?.openButtonLabel ?? "добавить описание";
+    site.addDescriptionModal?.openButtonLabel ?? "Добавить описание";
   actions.appendChild(descBtn);
+
+  const deal = site.dealFlow ?? {};
+  if (listKind === "listed") {
+    const buyBtn = document.createElement("button");
+    buyBtn.type = "button";
+    buyBtn.dataset.openPurchasePrice = "";
+    buyBtn.className =
+      "btn border border-white/35 bg-white/15 px-3 py-2 text-xs text-white hover:border-accent-400 hover:bg-accent-500 hover:text-white sm:text-sm";
+    buyBtn.textContent = deal.boughtButton ?? "Куплено";
+    actions.appendChild(buyBtn);
+  } else if (listKind === "purchased") {
+    const soldBtn = document.createElement("button");
+    soldBtn.type = "button";
+    soldBtn.dataset.openSalePrice = "";
+    soldBtn.className =
+      "btn border border-white/35 bg-white/15 px-3 py-2 text-xs text-white hover:border-accent-400 hover:bg-accent-500 hover:text-white sm:text-sm";
+    soldBtn.textContent = deal.soldButton ?? "Продано";
+    actions.appendChild(soldBtn);
+  }
+
   inner.appendChild(actions);
 
   article.append(noise, orb, inner);
@@ -286,28 +449,94 @@ function createCarCardElement(car) {
 
 async function renderGarageCards() {
   const section = document.getElementById("user-car-cards-section");
-  const list = document.getElementById("user-car-cards-list");
-  if (!section || !list) return;
-  const cars = await getAllGarageCars();
-  list.innerHTML = "";
-  for (const car of cars) {
-    list.appendChild(createCarCardElement(car));
+  const listListed = document.getElementById("user-car-cards-list");
+  const listPurchased = document.getElementById("purchased-car-cards-list");
+  const listSold = document.getElementById("sold-car-cards-list");
+  const emptyPurchased = document.getElementById("purchased-empty-hint");
+  const emptySold = document.getElementById("sold-empty-hint");
+  if (!section || !listListed || !listPurchased || !listSold) return;
+  const seq = ++garageRenderSeq;
+  let cars;
+  try {
+    cars = await getAllGarageCars();
+  } catch (err) {
+    console.error(err);
+    return;
   }
-  if (cars.length) section.classList.remove("hidden");
+  if (seq !== garageRenderSeq) return;
+  if (!Array.isArray(cars)) {
+    console.error("getAllGarageCars: ожидался массив");
+    return;
+  }
+  /** @type {import("./db.js").GarageCar[]} */
+  const listed = [];
+  /** @type {import("./db.js").GarageCar[]} */
+  const purchased = [];
+  /** @type {import("./db.js").GarageCar[]} */
+  const sold = [];
+  for (const car of cars) {
+    if (!car) continue;
+    const idStr = car.id != null ? String(car.id).trim() : "";
+    if (!idStr) continue;
+    const row = { ...car, id: idStr };
+    const st = carListingStatus(row);
+    if (st === "sold") sold.push(row);
+    else if (st === "purchased") purchased.push(row);
+    else listed.push(row);
+  }
+  /** @param {HTMLElement} el @param {import("./db.js").GarageCar[]} arr @param {"listed" | "purchased" | "sold"} kind */
+  function fillList(el, arr, kind) {
+    const frag = document.createDocumentFragment();
+    for (const c of arr) {
+      try {
+        frag.appendChild(createCarCardElement(c, kind));
+      } catch (err) {
+        console.error("createCarCardElement", c.id, err);
+      }
+    }
+    el.replaceChildren(frag);
+  }
+  fillList(listListed, listed, "listed");
+  fillList(listPurchased, purchased, "purchased");
+  fillList(listSold, sold, "sold");
+  if (listed.length) section.classList.remove("hidden");
   else section.classList.add("hidden");
+  emptyPurchased?.classList.toggle("hidden", purchased.length > 0);
+  emptySold?.classList.toggle("hidden", sold.length > 0);
 }
 
-async function appendCarCard({ title, linkUrl = "" }) {
-  await addGarageCar({ title, linkUrl });
+async function appendCarCard({ title, linkUrl = "", purchasePrice = "" }) {
+  await addGarageCar({ title, linkUrl, purchasePrice });
   await renderGarageCards();
+  broadcastGarageInvalidate();
   const list = document.getElementById("user-car-cards-list");
   list?.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function wireGarageCardActions() {
-  const list = document.getElementById("user-car-cards-list");
-  if (!list) return;
-  list.addEventListener("click", async (e) => {
+  const lists = document.querySelectorAll(".js-car-cards-list");
+  if (!lists.length) return;
+  const onClick = async (e) => {
+    const compareToggle = e.target.closest("[data-compare-toggle]");
+    if (compareToggle) {
+      const card = compareToggle.closest(".car-card");
+      const id = card?.dataset.carId;
+      if (!id) return;
+      if (comparisonStore.has(id)) {
+        comparisonStore.remove(id);
+      } else {
+        const added = comparisonStore.add(id);
+        if (!added) {
+          compareToggle.setAttribute("title", "Максимум 4 авто для сравнения");
+        }
+      }
+      await renderGarageCards();
+      if (comparePageApi?.refresh) {
+        await comparePageApi.refresh();
+      }
+      return;
+    }
+
     const del = e.target.closest("[data-delete-car]");
     if (!del) return;
     const card = del.closest(".car-card");
@@ -316,11 +545,17 @@ function wireGarageCardActions() {
     if (!window.confirm("Удалить эту карточку?")) return;
     try {
       await deleteGarageCar(id);
+      comparisonStore.remove(id);
       await renderGarageCards();
+      broadcastGarageInvalidate();
+      if (comparePageApi?.refresh) {
+        await comparePageApi.refresh();
+      }
     } catch (err) {
       console.error(err);
     }
-  });
+  };
+  lists.forEach((list) => list.addEventListener("click", onClick));
 }
 
 function wireAddCarModal() {
@@ -331,8 +566,20 @@ function wireAddCarModal() {
   const model = document.getElementById("modal-car-model");
   const year = document.getElementById("modal-car-year");
   const link = document.getElementById("modal-car-link");
+  const purchasePrice = document.getElementById("modal-car-purchase-price");
   const form = document.getElementById("add-car-form");
-  if (!cfg || !dialog || !openBtns.length || !brand || !model || !year || !form) return;
+  if (
+    !cfg ||
+    !dialog ||
+    !openBtns.length ||
+    !brand ||
+    !model ||
+    !year ||
+    !form ||
+    !purchasePrice
+  ) {
+    return;
+  }
 
   const title = dialog.querySelector("[data-modal-title]");
   if (title) title.textContent = cfg.title;
@@ -348,6 +595,8 @@ function wireAddCarModal() {
   if (lbLink) lbLink.textContent = cfg.linkLabel ?? "Ссылка";
   if (link && cfg.linkPlaceholder != null) link.placeholder = cfg.linkPlaceholder;
   if (linkHint) linkHint.textContent = cfg.linkHint ?? "";
+  const lbPurchasePrice = dialog.querySelector("[data-modal-label-purchase-price]");
+  if (lbPurchasePrice) lbPurchasePrice.textContent = "Цена покупки";
 
   const cancelBtn = dialog.querySelector("[data-modal-cancel-text]");
   const saveBtn = dialog.querySelector("[data-modal-save-text]");
@@ -396,11 +645,15 @@ function wireAddCarModal() {
     syncModels();
     applySingleBrandDefault();
     if (link) link.value = "";
+    purchasePrice.value = "";
   }
 
   resetModalForm();
   brand.addEventListener("change", syncModels);
   model.addEventListener("change", syncYears);
+  purchasePrice.addEventListener("blur", () => {
+    purchasePrice.value = normalizePriceText(purchasePrice.value);
+  });
 
   openBtns.forEach((openBtn) => {
     openBtn.addEventListener("click", () => {
@@ -429,8 +682,14 @@ function wireAddCarModal() {
       return;
     }
 
+    const normalizedPurchasePrice = normalizePriceText(purchasePrice.value);
+
     try {
-      await appendCarCard({ title: `${b} · ${m} · ${y}`, linkUrl });
+      await appendCarCard({
+        title: `${b} · ${m} · ${y}`,
+        linkUrl,
+        purchasePrice: normalizedPurchasePrice,
+      });
       dialog.close();
       resetModalForm();
     } catch (err) {
@@ -450,10 +709,11 @@ function wireAddCarModal() {
 function wireAddDescriptionModal() {
   const cfg = site.addDescriptionModal;
   const dialog = document.getElementById("add-description-dialog");
-  const list = document.getElementById("user-car-cards-list");
+  const descLists = document.querySelectorAll(".js-car-cards-list");
   const form = document.getElementById("add-description-form");
   const legal = document.getElementById("desc-legal");
   const electrical = document.getElementById("desc-electrical");
+  const color = document.getElementById("desc-color");
   const rustWhere = document.getElementById("desc-rust-where");
   const rustDegree = document.getElementById("desc-rust-degree");
   const chipsWhere = document.getElementById("desc-chips-where");
@@ -467,10 +727,11 @@ function wireAddDescriptionModal() {
   if (
     !cfg ||
     !dialog ||
-    !list ||
+    !descLists.length ||
     !form ||
     !legal ||
     !electrical ||
+    !color ||
     !rustWhere ||
     !rustDegree ||
     !chipsWhere ||
@@ -501,6 +762,7 @@ function wireAddDescriptionModal() {
     fillSelect(legal, cfg.legalOptions || [{ value: "", label: "—" }]);
     fillSelect(damaged, cfg.damagedOptions || [{ value: "", label: "—" }]);
     electrical.value = "";
+    color.value = "";
     rustWhere.value = "";
     rustDegree.value = "";
     chipsWhere.value = "";
@@ -518,6 +780,7 @@ function wireAddDescriptionModal() {
     if (!car) return;
     legal.value = car.legalStatus ?? "";
     electrical.value = car.electrical ?? "";
+    color.value = car.color ?? "";
     rustWhere.value = car.rustWhere ?? "";
     rustDegree.value = car.rustDegree ?? "";
     chipsWhere.value = car.chipsWhere ?? "";
@@ -544,7 +807,7 @@ function wireAddDescriptionModal() {
     resetDescForm();
   });
 
-  list.addEventListener("click", async (e) => {
+  const openDesc = async (e) => {
     const btn = e.target.closest("[data-open-add-description]");
     if (!btn) return;
     const card = btn.closest(".car-card");
@@ -566,7 +829,8 @@ function wireAddDescriptionModal() {
       resetDescForm();
     }
     dialog.showModal();
-  });
+  };
+  descLists.forEach((list) => list.addEventListener("click", openDesc));
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -578,6 +842,7 @@ function wireAddDescriptionModal() {
       await updateGarageCar(descriptionContextCarId, {
         legalStatus: legal.value,
         electrical: electrical.value.trim(),
+        color: color.value.trim(),
         rustWhere: rustWhere.value.trim(),
         rustDegree: rustDegree.value.trim(),
         chipsWhere: chipsWhere.value.trim(),
@@ -590,6 +855,7 @@ function wireAddDescriptionModal() {
         generalCondition: general.value.trim(),
       });
       await renderGarageCards();
+      broadcastGarageInvalidate();
     } catch (err) {
       console.error(err);
     }
@@ -686,10 +952,262 @@ function wireBackgroundAudio() {
   syncSoundUi();
 }
 
+function wireDealPriceModals() {
+  const deal = site.dealFlow ?? {};
+  const purchaseDialog = document.getElementById("purchase-price-dialog");
+  const saleDialog = document.getElementById("sale-price-dialog");
+  const purchaseForm = document.getElementById("purchase-price-form");
+  const saleForm = document.getElementById("sale-price-form");
+  const purchaseInput = document.getElementById("purchase-price-input");
+  const saleInput = document.getElementById("sale-price-input");
+  if (!purchaseDialog || !saleDialog || !purchaseForm || !saleForm || !purchaseInput || !saleInput) {
+    return;
+  }
+
+  const pTitle = purchaseDialog.querySelector("[data-purchase-modal-title]");
+  if (pTitle) pTitle.textContent = deal.purchaseModalTitle ?? "Куплено";
+  const sTitle = saleDialog.querySelector("[data-sale-modal-title]");
+  if (sTitle) sTitle.textContent = deal.saleModalTitle ?? "Продано";
+  const pLabel = purchaseDialog.querySelector("[data-purchase-label]");
+  if (pLabel) pLabel.textContent = deal.purchaseAmountLabel ?? "Сумма покупки";
+  purchaseInput.placeholder = deal.purchaseAmountPlaceholder ?? "";
+  const pHint = purchaseDialog.querySelector("[data-purchase-hint]");
+  if (pHint) pHint.textContent = deal.purchaseHint ?? "";
+  const sLabel = saleDialog.querySelector("[data-sale-label]");
+  if (sLabel) sLabel.textContent = deal.saleAmountLabel ?? "Сумма продажи";
+  saleInput.placeholder = deal.saleAmountPlaceholder ?? "";
+  const sHint = saleDialog.querySelector("[data-sale-hint]");
+  if (sHint) sHint.textContent = deal.saleHint ?? "";
+
+  const pCancel = purchaseDialog.querySelector("[data-purchase-cancel-text]");
+  if (pCancel) pCancel.textContent = deal.purchaseCancel ?? "Отмена";
+  const pSave = purchaseDialog.querySelector("[data-purchase-save-text]");
+  if (pSave) pSave.textContent = deal.purchaseSave ?? "Сохранить";
+  const sCancel = saleDialog.querySelector("[data-sale-cancel-text]");
+  if (sCancel) sCancel.textContent = deal.saleCancel ?? "Отмена";
+  const sSave = saleDialog.querySelector("[data-sale-save-text]");
+  if (sSave) sSave.textContent = deal.saleSave ?? "Сохранить";
+
+  let purchaseContextCarId = null;
+  let saleContextCarId = null;
+  const purchaseCarLine = purchaseDialog.querySelector("[data-purchase-car-line]");
+  const saleCarLine = saleDialog.querySelector("[data-sale-car-line]");
+
+  function resetPurchaseForm() {
+    purchaseInput.value = "";
+  }
+  function resetSaleForm() {
+    saleInput.value = "";
+  }
+
+  purchaseDialog.addEventListener("close", () => {
+    purchaseContextCarId = null;
+    resetPurchaseForm();
+    if (purchaseCarLine) {
+      purchaseCarLine.textContent = "";
+      purchaseCarLine.classList.add("hidden");
+    }
+  });
+  saleDialog.addEventListener("close", () => {
+    saleContextCarId = null;
+    resetSaleForm();
+    if (saleCarLine) {
+      saleCarLine.textContent = "";
+      saleCarLine.classList.add("hidden");
+    }
+  });
+
+  function onCarListClick(e) {
+    const buyBtn = e.target.closest("[data-open-purchase-price]");
+    if (buyBtn) {
+      const card = buyBtn.closest(".car-card");
+      purchaseContextCarId = card?.dataset.carId || null;
+      const carTitle = card?.querySelector("h2")?.textContent?.trim() ?? "";
+      if (purchaseCarLine && purchaseContextCarId) {
+        purchaseCarLine.textContent = `${deal.purchaseCarContextPrefix ?? "Машина:"} ${carTitle}`;
+        purchaseCarLine.classList.remove("hidden");
+      } else if (purchaseCarLine) {
+        purchaseCarLine.classList.add("hidden");
+      }
+      resetPurchaseForm();
+      purchaseDialog.showModal();
+      return;
+    }
+    const soldBtn = e.target.closest("[data-open-sale-price]");
+    if (soldBtn) {
+      const card = soldBtn.closest(".car-card");
+      saleContextCarId = card?.dataset.carId || null;
+      const carTitle = card?.querySelector("h2")?.textContent?.trim() ?? "";
+      if (saleCarLine && saleContextCarId) {
+        saleCarLine.textContent = `${deal.saleCarContextPrefix ?? "Машина:"} ${carTitle}`;
+        saleCarLine.classList.remove("hidden");
+      } else if (saleCarLine) {
+        saleCarLine.classList.add("hidden");
+      }
+      resetSaleForm();
+      saleDialog.showModal();
+    }
+  }
+
+  document.querySelectorAll(".js-car-cards-list").forEach((list) => {
+    list.addEventListener("click", onCarListClick);
+  });
+
+  purchaseForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!purchaseContextCarId) {
+      purchaseDialog.close();
+      return;
+    }
+    const amount = purchaseInput.value.trim();
+    if (!amount) return;
+    try {
+      await updateGarageCar(purchaseContextCarId, {
+        listingStatus: "purchased",
+        purchasePrice: amount,
+      });
+      await renderGarageCards();
+      broadcastGarageInvalidate();
+      document.dispatchEvent(new CustomEvent("car-notes:open-tab", { detail: { tab: "purchased" } }));
+    } catch (err) {
+      console.error(err);
+    }
+    purchaseDialog.close();
+  });
+
+  saleForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!saleContextCarId) {
+      saleDialog.close();
+      return;
+    }
+    const amount = saleInput.value.trim();
+    if (!amount) return;
+    try {
+      await updateGarageCar(saleContextCarId, {
+        listingStatus: "sold",
+        salePrice: amount,
+      });
+      await renderGarageCards();
+      broadcastGarageInvalidate();
+      document.dispatchEvent(new CustomEvent("car-notes:open-tab", { detail: { tab: "sold" } }));
+    } catch (err) {
+      console.error(err);
+    }
+    saleDialog.close();
+  });
+
+  purchaseDialog.querySelectorAll("[data-purchase-modal-close]").forEach((btn) => {
+    btn.addEventListener("click", () => purchaseDialog.close());
+  });
+  purchaseDialog.addEventListener("click", (e) => {
+    if (e.target === purchaseDialog) purchaseDialog.close();
+  });
+  saleDialog.querySelectorAll("[data-sale-modal-close]").forEach((btn) => {
+    btn.addEventListener("click", () => saleDialog.close());
+  });
+  saleDialog.addEventListener("click", (e) => {
+    if (e.target === saleDialog) saleDialog.close();
+  });
+}
+
+const SITE_TAB_ACTIVE_CLASSES = [
+  "border-ink-300",
+  "bg-white/90",
+  "text-ink-950",
+  "shadow-sm",
+  "dark:border-ink-500",
+  "dark:bg-ink-900/90",
+  "dark:text-white",
+];
+
+function wireSiteTabs() {
+  const garage = document.querySelector('[data-site-panel="garage"]');
+  const tabs = document.querySelectorAll("[data-site-tab]");
+  const panelIds = Array.from(tabs)
+    .map((t) => t.getAttribute("data-site-tab") || "")
+    .filter(Boolean);
+  /** @type {Record<string, HTMLElement | null>} */
+  const panels = {};
+  for (const id of panelIds) {
+    panels[id] = document.querySelector(`[data-site-panel="${id}"]`);
+  }
+  const logo = document.querySelector("[data-logo-link]");
+  if (!garage || !tabs.length) return;
+
+  function setTabActive(activeName) {
+    tabs.forEach((t) => {
+      const on = t.getAttribute("data-site-tab") === activeName;
+      t.setAttribute("aria-selected", on ? "true" : "false");
+      SITE_TAB_ACTIVE_CLASSES.forEach((c) => t.classList.toggle(c, on));
+    });
+  }
+
+  function showGarage() {
+    garage.hidden = false;
+    for (const id of panelIds) {
+      const p = panels[id];
+      if (p) p.hidden = true;
+    }
+    setTabActive("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /** @param {string} name */
+  function showPanel(name) {
+    if (!panels[name]) return;
+    garage.hidden = true;
+    for (const id of panelIds) {
+      const p = panels[id];
+      if (p) p.hidden = id !== name;
+    }
+    setTabActive(name);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", (e) => {
+      e.preventDefault();
+      const name = tab.getAttribute("data-site-tab");
+      if (name) showPanel(name);
+    });
+  });
+
+  logo?.addEventListener("click", (e) => {
+    const href = (logo.getAttribute("href") || "").trim();
+    if (href === "#" || href === "") {
+      e.preventDefault();
+      showGarage();
+    }
+  });
+
+  document.addEventListener("car-notes:open-tab", (ev) => {
+    const tab = /** @type {CustomEvent<{ tab?: string }>} */ (ev).detail?.tab;
+    if (typeof tab === "string" && panelIds.includes(tab)) {
+      showPanel(tab);
+      if (tab === "compare" && comparePageApi?.refresh) {
+        void comparePageApi.refresh();
+      }
+    } else if (tab === "") {
+      showGarage();
+    }
+  });
+}
+
 async function bootstrap() {
   applySite();
   wireTheme();
   wireBackgroundAudio();
+  const headerControls = document.querySelector("header .flex.flex-1");
+  if (headerControls instanceof HTMLElement) {
+    mountNotificationBell(headerControls);
+  }
+  comparePageApi = mountComparePage();
+  renderComparisonIndicator();
+  document.addEventListener(comparisonStore.CHANGE_EVENT, () => {
+    renderComparisonIndicator();
+  });
+  wireSiteTabs();
   try {
     await renderGarageCards();
   } catch (err) {
@@ -697,6 +1215,7 @@ async function bootstrap() {
   }
   wireAddCarModal();
   wireAddDescriptionModal();
+  wireDealPriceModals();
   wireGarageCardActions();
 }
 
